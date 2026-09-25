@@ -389,14 +389,14 @@ p { margin: 0; color: var(--muted); text-wrap: pretty; }
 }
 .marquee__track {
   display: flex; gap: 56px; width: max-content;
-  animation: marquee 38s linear infinite;
+  animation: marquee 110s linear infinite;
 }
 .marquee:hover .marquee__track { animation-play-state: paused; }
 .marquee__track span {
-  font-family: var(--font-display); font-size: clamp(14px, 1.6vw, 18px); color: var(--faint);
+  font-family: var(--font-display); font-size: clamp(14px, 1.6vw, 18px); color: var(--accent);
   white-space: nowrap; display: inline-flex; align-items: center; gap: 56px;
 }
-.marquee__track span::after { content: "✦"; color: var(--accent); font-size: 10px; }
+.marquee__track span::after { content: "✦"; color: #fff; font-size: 10px; }
 @keyframes marquee { to { transform: translateX(-50%); } }
 
 /* Process / timeline ------------------------------------------------------ */
