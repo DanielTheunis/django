@@ -5,7 +5,7 @@
    frame into that element's own 2D canvas. One GPU context keeps phones fast,
    and only models that are on screen are built and rendered.
 
-   Usage: <div data-scene="chip|rack|gyro|display|totem|globe|robot|devboard|switch|cctv|spanner"></div>
+   Usage: <div data-scene="chip|rack|gyro|display|totem|globe|ledwall|devboard|switch|cctv|spanner"></div>
    ========================================================================== */
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -41,12 +41,36 @@ function tex(canvas, srgb = true) {
 const ease = (x) => x * x * (3 - 2 * x);
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 
+/* Fine surface detail so parts read as real materials, not smooth CG. */
+let _brush, _grain;
+function brushTex() {
+  if (_brush) return _brush;
+  const [c, x] = makeCanvas(512, 512), r = rng(11);
+  x.fillStyle = "#c8c8c8"; x.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 5000; i++) {
+    const v = 150 + r() * 105 | 0;
+    x.fillStyle = `rgba(${v},${v},${v},${0.25 + r() * 0.4})`;
+    x.fillRect(r() * 512, r() * 512, 20 + r() * 200, 1);
+  }
+  _brush = tex(c, false); _brush.wrapS = _brush.wrapT = THREE.RepeatWrapping; _brush.repeat.set(2, 2);
+  return _brush;
+}
+function grainTex() {
+  if (_grain) return _grain;
+  const [c, x] = makeCanvas(256, 256), r = rng(13);
+  const img = x.createImageData(256, 256);
+  for (let i = 0; i < img.data.length; i += 4) { const v = 200 + r() * 55 | 0; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+  x.putImageData(img, 0, 0);
+  _grain = tex(c, false); _grain.wrapS = _grain.wrapT = THREE.RepeatWrapping; _grain.repeat.set(4, 4);
+  return _grain;
+}
+
 const M = {
   chrome: (c = 0xe9ecf0, r = 0.07) => new THREE.MeshPhysicalMaterial({ color: c, metalness: 1, roughness: r }),
-  steel: (c = 0xb3b9c2, r = 0.3) => new THREE.MeshPhysicalMaterial({ color: c, metalness: 1, roughness: r }),
+  steel: (c = 0xb3b9c2, r = 0.3) => new THREE.MeshPhysicalMaterial({ color: c, metalness: 1, roughness: r * 1.15, roughnessMap: brushTex(), bumpMap: brushTex(), bumpScale: 0.35 }),
   gold: () => new THREE.MeshPhysicalMaterial({ color: 0xe0b45e, metalness: 1, roughness: 0.2 }),
-  paint: (c, r = 0.32) => new THREE.MeshPhysicalMaterial({ color: c, metalness: 0.05, roughness: r, clearcoat: 0.8, clearcoatRoughness: 0.12 }),
-  plastic: (c, r = 0.45) => new THREE.MeshPhysicalMaterial({ color: c, metalness: 0, roughness: r }),
+  paint: (c, r = 0.32) => new THREE.MeshPhysicalMaterial({ color: c, metalness: 0.05, roughness: r * 1.1, roughnessMap: grainTex(), bumpMap: grainTex(), bumpScale: 0.08, clearcoat: 0.4, clearcoatRoughness: 0.25 }),
+  plastic: (c, r = 0.45) => new THREE.MeshPhysicalMaterial({ color: c, metalness: 0, roughness: r * 1.1, roughnessMap: grainTex(), bumpMap: grainTex(), bumpScale: 0.12 }),
   rubber: (c = 0x16181b) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.92 }),
   glass: (c = 0x07080a) => new THREE.MeshPhysicalMaterial({ color: c, metalness: 0, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.02 }),
   led: (c) => new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: c, emissiveIntensity: 1, roughness: 0.3 }),
@@ -90,6 +114,37 @@ function pcbTexture(W, H, seed, traces, extra) {
   return tex(c);
 }
 
+/* Emissive mask of the traces, driven by a shader so current visibly
+   pulses outward from the chip, plus a ring on tap. */
+function pulseBoard(map, W, H, traces, centre) {
+  const [c, e] = makeCanvas(W, H);
+  e.fillStyle = "#000"; e.fillRect(0, 0, W, H);
+  e.lineCap = "round"; e.lineJoin = "round"; e.strokeStyle = "#fff"; e.fillStyle = "#fff";
+  for (const tr of traces) {
+    e.lineWidth = tr.w; e.beginPath();
+    tr.pts.forEach(([x, y], i) => (i ? e.lineTo(x * W, y * H) : e.moveTo(x * W, y * H))); e.stroke();
+    const [ex, ey] = tr.pts[tr.pts.length - 1];
+    e.beginPath(); e.arc(ex * W, ey * H, tr.w + 3, 0, 7); e.fill();
+  }
+  const U = { uTime: { value: 0 }, uPulse: { value: 0 } };
+  const mat = new THREE.MeshPhysicalMaterial({
+    map, emissiveMap: tex(c), emissive: new THREE.Color(0x3ec8ff), emissiveIntensity: 1.6,
+    roughness: 0.5, metalness: 0.1, clearcoat: 0.5, clearcoatRoughness: 0.25,
+  });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = U.uTime; sh.uniforms.uPulse = U.uPulse;
+    sh.fragmentShader = "uniform float uTime;\nuniform float uPulse;\n" + sh.fragmentShader.replace(
+      "#include <emissivemap_fragment>",
+      `#include <emissivemap_fragment>
+      vec2 dv = (vEmissiveMapUv - vec2(${centre[0].toFixed(3)}, ${centre[1].toFixed(3)})) * vec2(${(W / H).toFixed(3)}, 1.0);
+      float dd = length(dv);
+      float wave = pow(0.5 + 0.5 * sin(dd * 32.0 - uTime * 2.8), 10.0);
+      float ring = uPulse * smoothstep(0.0, 1.0, 1.0 - abs(dd - (1.0 - uPulse) * 0.8) * 9.0);
+      totalEmissiveRadiance *= wave * 0.9 + ring * 2.2;`);
+  };
+  return { mat, U };
+}
+
 /* ==========================================================================
    MODELS — each returns { object, camera, radius, floorY, update(t, dt, pulse) }
    ========================================================================== */
@@ -120,8 +175,8 @@ function chip() {
     a.font = "16px Inter, sans-serif"; a.fillText("UX-9 CORE  ·  REV 2.4  ·  POWERED BY INNOVATION", 40, H - 20);
   });
   const board = mesh(rbox(4.4, 0.1, 4.4, 0.05, 4), M.plastic(0x0a1310, 0.55));
-  const top = new THREE.Mesh(new THREE.PlaneGeometry(4.34, 4.34),
-    new THREE.MeshPhysicalMaterial({ map, roughness: 0.5, metalness: 0.1, clearcoat: 0.5, clearcoatRoughness: 0.25 }));
+  const pb = pulseBoard(map, 1024, 1024, traces, [0.5, 0.5]);
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(4.34, 4.34), pb.mat);
   top.rotation.x = -Math.PI / 2; top.position.y = 0.0505;
   g.add(board, top);
 
@@ -161,6 +216,7 @@ function chip() {
   return {
     object: g, camera: new THREE.Vector3(0, 5.2, 6.4), radius: 3.0, floorY: -0.06, startRotation: -0.55,
     update(t, dt, p) {
+      pb.U.uTime.value = t; pb.U.uPulse.value = p;
       chipG.position.y = Math.sin(p * Math.PI) * 0.35;
       chipG.rotation.y = p * Math.PI * 0.5;
       g.position.y = Math.sin(t * 0.8) * 0.05;
@@ -168,73 +224,107 @@ function chip() {
   };
 }
 
-/* ROBOT — industrial arm working over a conveyor (automation) */
-function robot() {
+/* LED WALL — die-cast LED tiles with individual RGB pixels; one tile slides into place (LED screens) */
+function ledwall() {
   const g = new THREE.Group();
-  const white = M.paint(0xeef0f3, 0.3), blue = M.paint(0x1b86cf, 0.3), dark = M.paint(0x2a2e35, 0.4);
+  const T = 1.0, gap = 0.01, cols = 2, rows = 2, px = 48;
+  const PW = cols * px, PH = rows * px;
+  const [cc, cx] = makeCanvas(PW, PH);
+  const content = tex(cc);
+  content.magFilter = content.minFilter = THREE.NearestFilter; content.generateMipmaps = false;
 
-  g.add(mesh(new THREE.CylinderGeometry(0.72, 0.82, 0.3, SEG), dark, 0, 0.15, 0));
-  g.add(mesh(new THREE.CylinderGeometry(0.84, 0.84, 0.04, SEG), M.steel(), 0, 0.02, 0));
+  // One LED package per pixel: a bright die in a black lens.
+  const [mc, mx] = makeCanvas(32, 32);
+  mx.fillStyle = "#000"; mx.fillRect(0, 0, 32, 32);
+  const dg = mx.createRadialGradient(16, 16, 0, 16, 16, 12);
+  dg.addColorStop(0, "#fff"); dg.addColorStop(0.55, "#bbb"); dg.addColorStop(1, "#000");
+  mx.fillStyle = dg; mx.beginPath(); mx.arc(16, 16, 12, 0, 7); mx.fill();
+  const mask = tex(mc, false); mask.wrapS = mask.wrapT = THREE.RepeatWrapping;
 
-  const turret = new THREE.Group(); turret.position.y = 0.3; g.add(turret);
-  turret.add(mesh(new THREE.CylinderGeometry(0.52, 0.6, 0.4, SEG), white, 0, 0.2, 0));
-  const lab = decal([["UNITRONICS", 0.5]], 0.7, 0.12, { color: 0x1b86cf, metal: 0, rough: 0.4 });
-  lab.position.set(0, 0.22, 0.575); lab.rotation.x = -0.1; turret.add(lab);
+  const faceMat = () => {
+    const m = new THREE.MeshPhysicalMaterial({ color: 0x0a0a0b, roughness: 0.6, emissive: 0xffffff, emissiveMap: content, emissiveIntensity: 1.5, clearcoat: 0.25, clearcoatRoughness: 0.4 });
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uMask = { value: mask }; sh.uniforms.uCells = { value: new THREE.Vector2(PW, PH) };
+      sh.fragmentShader = "uniform sampler2D uMask;\nuniform vec2 uCells;\n" + sh.fragmentShader.replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+        float led = texture2D(uMask, vEmissiveMapUv * uCells).r;
+        totalEmissiveRadiance *= led * 1.5;
+        diffuseColor.rgb += vec3(0.06) * led;`);
+    };
+    return m;
+  };
+  const staticMat = faceMat(), movingMat = faceMat();
 
-  const joint = (r, len, mat = blue) => { const m = mesh(new THREE.CylinderGeometry(r, r, len, SEG), mat); m.rotation.x = Math.PI / 2; return m; };
-  const shoulder = new THREE.Group(); shoulder.position.y = 0.62; turret.add(shoulder);
-  shoulder.add(joint(0.3, 0.72), joint(0.12, 0.76, M.steel()));
-  shoulder.add(mesh(rbox(0.38, 1.6, 0.38, 0.12, 4), white, 0, 0.8, 0));
-
-  const elbow = new THREE.Group(); elbow.position.y = 1.6; shoulder.add(elbow);
-  elbow.add(joint(0.23, 0.56));
-  elbow.add(mesh(rbox(0.3, 1.25, 0.3, 0.1, 4), white, 0, 0.62, 0));
-  elbow.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 16), dark, 0.17, 0.6, 0));
-
-  const wrist = new THREE.Group(); wrist.position.y = 1.25; elbow.add(wrist);
-  wrist.add(joint(0.15, 0.36, dark));
-  wrist.add(mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.22, 32), M.steel(), 0, 0.14, 0));
-  wrist.add(mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 32), M.chrome(), 0, 0.26, 0));
-  wrist.add(mesh(rbox(0.42, 0.1, 0.18, 0.02), dark, 0, 0.32, 0));
-  const fingerGeo = rbox(0.05, 0.26, 0.14, 0.015), fingerMat = M.chrome(0xd6dae0, 0.18);
-  const f1 = mesh(fingerGeo, fingerMat, -0.12, 0.49, 0), f2 = mesh(fingerGeo, fingerMat, 0.12, 0.49, 0);
-  wrist.add(f1, f2);
-
-  // Conveyor with boxes.
-  const conv = new THREE.Group(); conv.position.set(1.65, 0, 0); g.add(conv);
-  const [bc, bx] = makeCanvas(64, 512);
-  bx.fillStyle = "#1b1d21"; bx.fillRect(0, 0, 64, 512);
-  for (let i = 0; i < 512; i += 32) { bx.fillStyle = "#0e0f11"; bx.fillRect(0, i, 64, 5); }
-  const beltTex = tex(bc); beltTex.wrapS = beltTex.wrapT = THREE.RepeatWrapping; beltTex.repeat.set(1, 3);
-  const beltTop = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 4.4), new THREE.MeshStandardMaterial({ map: beltTex, roughness: 0.85 }));
-  beltTop.rotation.x = -Math.PI / 2; beltTop.position.y = 0.581;
-  conv.add(mesh(rbox(0.86, 0.14, 4.4, 0.04), M.rubber(), 0, 0.51, 0), beltTop);
-  [-0.47, 0.47].forEach((x) => conv.add(mesh(rbox(0.08, 0.2, 4.5, 0.02), M.steel(0x9aa1ab, 0.35), x, 0.54, 0)));
-  [-1.9, 0, 1.9].forEach((z) => [-0.4, 0.4].forEach((x) => conv.add(mesh(new THREE.BoxGeometry(0.07, 0.44, 0.07), dark, x, 0.22, z))));
-  const card = M.plastic(0xb8875a, 0.8), tape = M.plastic(0xd8c7a2, 0.5);
-  const boxes = [0, 1, 2].map(() => {
-    const b = new THREE.Group();
-    b.add(mesh(rbox(0.42, 0.34, 0.42, 0.02), card), mesh(new THREE.BoxGeometry(0.1, 0.005, 0.43), tape, 0, 0.171, 0));
-    b.position.y = 0.75; conv.add(b);
-    return b;
+  const cabMat = M.steel(0x5d636b, 0.5);
+  const tiles = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const tile = new THREE.Group();
+    tile.add(mesh(rbox(T - gap, T - gap, 0.085, 0.01, 2), cabMat, 0, 0, -0.045));
+    const face = new THREE.PlaneGeometry(T - gap - 0.006, T - gap - 0.006);
+    const uv = face.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (c + uv.getX(i)) / cols, (r + uv.getY(i)) / rows);
+    const moving = r === rows - 1 && c === cols - 1;
+    tile.add(mesh(face, moving ? movingMat : staticMat, 0, 0, 0.0005));
+    // Rear: ribs, hub board, power/data connectors, handles.
+    [-0.25, 0.25].forEach((o) => {
+      tile.add(mesh(new THREE.BoxGeometry(T - 0.1, 0.05, 0.04), cabMat, 0, o, -0.105));
+      tile.add(mesh(new THREE.BoxGeometry(0.05, T - 0.1, 0.04), cabMat, o, 0, -0.105));
+    });
+    tile.add(mesh(rbox(0.36, 0.22, 0.03, 0.01), M.plastic(0x0d3b22, 0.5), 0, 0, -0.14));
+    [-0.12, 0.12].forEach((o) => {
+      const con = mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.06, 20), M.plastic(0x18191c, 0.5), o, -0.3, -0.15); con.rotation.x = Math.PI / 2; tile.add(con);
+    });
+    const handle = mesh(new THREE.TorusGeometry(0.07, 0.012, 10, 24, Math.PI), M.steel(0x9aa1ab, 0.3), 0, 0.33, -0.13); handle.rotation.x = Math.PI / 2; tile.add(handle);
+    const home = new THREE.Vector3((c - (cols - 1) / 2) * T, (r - (rows - 1) / 2) * T, 0);
+    tile.position.copy(home);
+    g.add(tile);
+    tiles.push({ tile, home, moving });
+  }
+  // Stand.
+  const legMat = M.steel(0x2e3238, 0.45);
+  [-0.6, 0.6].forEach((x) => {
+    g.add(mesh(new THREE.BoxGeometry(0.06, 2.1, 0.06), legMat, x, -0.05, -0.2));
+    g.add(mesh(rbox(0.1, 0.05, 0.8, 0.01), legMat, x, -1.08, -0.2));
   });
 
-  g.position.set(-0.8, -1.25, 0);
+  const word = "UNITRONICS";
+  let acc = 1, pulseT = 0;
+  const paint = (t, p) => {
+    const hue = 200 + Math.sin(t * 0.4) * 20;
+    const gr = cx.createLinearGradient(0, 0, PW, PH);
+    gr.addColorStop(0, `hsl(${hue},85%,30%)`); gr.addColorStop(1, `hsl(${hue + 50},70%,14%)`);
+    cx.fillStyle = gr; cx.fillRect(0, 0, PW, PH);
+    for (let i = 0; i < 3; i++) {
+      cx.strokeStyle = `rgba(255,255,255,${0.12 + i * 0.05})`; cx.lineWidth = 2; cx.beginPath();
+      for (let x = 0; x <= PW; x += 3) { const y = PH * 0.78 + Math.sin(x * 0.08 + t * 2 + i) * 5 + i * 4; x ? cx.lineTo(x, y) : cx.moveTo(x, y); }
+      cx.stroke();
+    }
+    cx.font = "400 26px Michroma, sans-serif"; cx.textBaseline = "middle"; cx.fillStyle = "#fff";
+    const w = cx.measureText(word + "  ").width, off = -((t * 30) % w);
+    for (let x = off; x < PW; x += w) cx.fillText(word, x, PH * 0.42);
+    if (p > 0) {
+      cx.strokeStyle = `rgba(255,255,255,${p})`; cx.lineWidth = 4;
+      cx.beginPath(); cx.arc(PW / 2, PH / 2, (1 - p) * PW * 0.8, 0, 7); cx.stroke();
+    }
+    content.needsUpdate = true;
+  };
+
+  g.position.y = 0.05;
   return {
-    object: g, camera: new THREE.Vector3(4.2, 3.2, 5.8), radius: 2.35, floorY: -1.25, startRotation: -0.5,
+    object: g, camera: new THREE.Vector3(1.9, 0.5, 5.4), radius: 1.55, floorY: -1.08, startRotation: -0.35,
     update(t, dt, p) {
-      const s = 1 + p * 2;
-      turret.rotation.y = 0.32 * Math.sin(t * 0.55 * s);
-      const sh = 0.5 + 0.12 * Math.sin(t * 0.8 * s);
-      const el = 1.9 + 0.18 * Math.sin(t * 0.8 * s + 1.1);
-      shoulder.rotation.z = -sh;
-      elbow.rotation.z = -el;
-      wrist.rotation.z = -(Math.PI - sh - el);
-      wrist.rotation.y = t * 0.4;
-      const grip = 0.5 + 0.5 * Math.sin(t * 1.6 * s);
-      f1.position.x = -0.07 - grip * 0.08; f2.position.x = 0.07 + grip * 0.08;
-      beltTex.offset.y -= dt * 0.12 * s;
-      boxes.forEach((b, i) => { b.position.z = ((t * 0.35 * s + i * 1.45) % 4.35) - 2.17; });
+      acc += dt;
+      if (acc > 1 / 20) { acc = 0; paint(t, p); }
+      const cyc = (t % 7) / 7;
+      const k = cyc < 0.25 ? 0 : cyc < 0.5 ? ease((cyc - 0.25) / 0.25) : cyc < 0.9 ? 1 : 1 - ease((cyc - 0.9) / 0.1);
+      for (const tl of tiles) {
+        if (!tl.moving) continue;
+        const out = 1 - k;
+        tl.tile.position.set(tl.home.x + out * 0.35, tl.home.y + out * 0.15, tl.home.z + out * 0.9);
+        tl.tile.rotation.y = out * -0.7;
+        movingMat.emissiveIntensity = k > 0.98 ? 1.5 : 0.0;
+      }
     },
   };
 }
@@ -263,7 +353,8 @@ function devboard() {
     a.font = "14px Inter, sans-serif"; a.fillText("POWERED BY INNOVATION", 0.08 * w, 0.71 * h);
   });
   g.add(mesh(rbox(W, 0.08, D, 0.04), M.plastic(0x0a1310, 0.55)));
-  const top = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.04, D - 0.04), new THREE.MeshPhysicalMaterial({ map, roughness: 0.5, clearcoat: 0.5, clearcoatRoughness: 0.25 }));
+  const pb = pulseBoard(map, 1024, 572, traces, [mcu[0], 1 - mcu[1]]);
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.04, D - 0.04), pb.mat);
   top.rotation.x = -Math.PI / 2; top.position.y = 0.0405; g.add(top);
 
   const cx = (mcu[0] - 0.5) * W, cz = (mcu[1] - 0.5) * D;
@@ -304,6 +395,7 @@ function devboard() {
   return {
     object: g, camera: new THREE.Vector3(0, 3.6, 4.6), radius: 1.75, floorY: -0.45, startRotation: -0.35,
     update(t, dt, p) {
+      pb.U.uTime.value = t; pb.U.uPulse.value = p;
       ledA.material.emissiveIntensity = Math.sin(t * 6) > 0 ? 1.2 : 0.05;
       ledB.material.emissiveIntensity = (Math.sin(t * 2.3) > 0.4 || p > 0.1) ? 1.2 : 0.05;
       g.position.y = Math.sin(t * 0.9) * 0.06 + Math.sin(p * Math.PI) * 0.3;
@@ -578,7 +670,7 @@ function rack() {
     x.fillStyle = "#060708";
     for (let i = 0; i < 18; i++) for (let j = 0; j < 4; j++) { x.beginPath(); x.roundRect(30 + i * 17, 26 + j * 22, 11, 16, 3); x.fill(); }
     x.fillStyle = "#e7ebf0"; x.font = "400 24px Michroma, sans-serif"; x.fillText("UNITRONICS", 370, 64);
-    x.fillStyle = "#8a93a1"; x.font = "500 16px Inter, sans-serif"; x.fillText(`UX-R0${n}  ·  INDUSTRIAL CONTROLLER`, 370, 94);
+    x.fillStyle = "#8a93a1"; x.font = "500 16px Inter, sans-serif"; x.fillText(`UX-R0${n}  ·  MEDIA SERVER`, 370, 94);
     for (let i = 0; i < 3; i++) { x.fillStyle = "#0b0d11"; x.fillRect(640 + i * 92, 24, 82, 88); x.strokeStyle = "#2f343c"; x.lineWidth = 2; x.strokeRect(640 + i * 92, 24, 82, 88); }
     return tex(c);
   };
@@ -681,7 +773,7 @@ function globe() {
 }
 
 const SCENES = {
-  chip, robot, devboard, switch: netswitch, cctv, spanner, rack, gyro, globe,
+  chip, ledwall, devboard, switch: netswitch, cctv, spanner, rack, gyro, globe,
   display: display(false), totem: display(true),
 };
 
@@ -768,7 +860,7 @@ class View {
     const key = new THREE.DirectionalLight(0xffffff, 2.6);
     key.position.set(R * 1.1, R * 3.2, R * 1.8);
     key.castShadow = true;
-    key.shadow.mapSize.set(lowPower ? 512 : 1024, lowPower ? 512 : 1024);
+    key.shadow.mapSize.set(lowPower ? 1024 : 2048, lowPower ? 1024 : 2048);
     Object.assign(key.shadow.camera, { left: -R * 1.7, right: R * 1.7, top: R * 1.7, bottom: -R * 1.7, near: 0.1, far: R * 10 });
     key.shadow.camera.updateProjectionMatrix();
     key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
