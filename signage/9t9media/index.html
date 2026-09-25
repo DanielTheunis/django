@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>9T9 Media Signage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --yellow: #f5c518;
+    --yellow-hot: #ffd83a;
+    --ink: #0a0a0a;
+    --white: #f4f4f2;
+    --muted: #9a9a96;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--ink);
+    color: var(--white);
+    font-family: "Inter", system-ui, sans-serif;
+    cursor: none;
+  }
+
+  /* ---------- Background ---------- */
+  .bg {
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(circle at 28% 50%, rgba(245, 197, 24, 0.16), transparent 45%),
+      radial-gradient(circle at 85% 90%, rgba(245, 197, 24, 0.08), transparent 40%),
+      var(--ink);
+  }
+
+  .bg::after {
+    content: "";
+    position: absolute;
+    inset: -50%;
+    background-image:
+      repeating-linear-gradient(115deg, transparent 0 38px, rgba(245, 197, 24, 0.035) 38px 40px);
+    animation: drift 30s linear infinite;
+  }
+
+  @keyframes drift {
+    to { transform: translate(80px, 0); }
+  }
+
+  #sparks {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* ---------- Layout ---------- */
+  .stage {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    grid-template-rows: 1fr auto;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ---------- Logo ---------- */
+  .logo-wrap {
+    display: grid;
+    place-items: center;
+    position: relative;
+  }
+
+  .logo-box {
+    position: relative;
+    width: min(46vw, 78vh);
+    aspect-ratio: 1;
+    animation: slam 1.1s cubic-bezier(.2, 1.6, .4, 1) both;
+  }
+
+  .ring {
+    position: absolute;
+    inset: 4%;
+    border-radius: 50%;
+    border: 0.5vmin dashed rgba(245, 197, 24, 0.35);
+    animation: spin 40s linear infinite;
+  }
+
+  .ring.two {
+    inset: -1%;
+    border: 0.25vmin solid transparent;
+    border-top-color: var(--yellow);
+    border-right-color: rgba(245, 197, 24, 0.4);
+    animation: spin 6s linear infinite reverse;
+  }
+
+  .glow {
+    position: absolute;
+    inset: 15%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(245, 197, 24, 0.45), transparent 70%);
+    filter: blur(4vmin);
+    animation: pulse 3s ease-in-out infinite;
+  }
+
+  .logo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    /* the logo artwork sits on a black square; fade its edges into the background */
+    -webkit-mask-image: radial-gradient(circle, #000 60%, transparent 70.5%);
+    mask-image: radial-gradient(circle, #000 60%, transparent 70.5%);
+    animation: float 6s ease-in-out infinite, flicker 7s steps(1) infinite 2s;
+  }
+
+  .shine {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    overflow: hidden;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+
+  .shine::before {
+    content: "";
+    position: absolute;
+    top: -20%;
+    bottom: -20%;
+    width: 25%;
+    left: -40%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+    transform: skewX(-20deg);
+    animation: sweep 5s ease-in-out infinite 1.5s;
+  }
+
+  @keyframes slam {
+    0%   { transform: scale(2.6) rotate(-8deg); opacity: 0; filter: blur(12px); }
+    60%  { opacity: 1; filter: blur(0); }
+    100% { transform: scale(1) rotate(0); }
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.55; transform: scale(0.95); }
+    50%      { opacity: 1;    transform: scale(1.08); }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(-1deg); }
+    50%      { transform: translateY(-1.8%) rotate(1deg); }
+  }
+
+  @keyframes flicker {
+    0%, 100% { filter: brightness(1); }
+    92%      { filter: brightness(1.6) contrast(1.2); }
+    93%      { filter: brightness(0.8); }
+    94%      { filter: brightness(1.5); }
+    95%      { filter: brightness(1); }
+  }
+
+  @keyframes sweep {
+    0%   { left: -40%; }
+    40%  { left: 120%; }
+    100% { left: 120%; }
+  }
+
+  .shake { animation: shake 0.45s cubic-bezier(.36, .07, .19, .97); }
+
+  @keyframes shake {
+    10%, 90% { transform: translate(-2px, 1px); }
+    20%, 80% { transform: translate(4px, -2px); }
+    30%, 50%, 70% { transform: translate(-6px, 2px); }
+    40%, 60% { transform: translate(6px, -1px); }
+  }
+
+  /* ---------- Right panel ---------- */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5vh;
+    padding: 6vh 6vw 4vh 2vw;
+    min-width: 0;
+  }
+
+  .slides {
+    position: relative;
+    height: 36vh;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    opacity: 0;
+    transform: translateX(6vw) skewX(-6deg);
+    transition: opacity 0.7s ease, transform 0.7s cubic-bezier(.2, .9, .3, 1.2);
+  }
+
+  .slide.active {
+    opacity: 1;
+    transform: none;
+  }
+
+  .slide.leaving {
+    opacity: 0;
+    transform: translateX(-6vw) skewX(6deg);
+  }
+
+  .kicker {
+    font-weight: 800;
+    font-size: 2vmin;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--yellow);
+    margin-bottom: 1.6vh;
+  }
+
+  .headline {
+    font-family: "Anton", Impact, sans-serif;
+    font-size: 9.5vmin;
+    line-height: 0.98;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+  }
+
+  .headline em {
+    font-style: normal;
+    color: var(--yellow);
+    text-shadow: 0 0 3vmin rgba(245, 197, 24, 0.45);
+  }
+
+  .sub {
+    margin-top: 2vh;
+    font-size: 2.6vmin;
+    font-weight: 500;
+    color: var(--muted);
+    max-width: 38ch;
+  }
+
+  .dots {
+    display: flex;
+    gap: 1vmin;
+  }
+
+  .dot {
+    width: 4vmin;
+    height: 0.6vmin;
+    background: rgba(255, 255, 255, 0.18);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .dot.active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--yellow);
+    transform-origin: left;
+    animation: fill var(--slide-ms) linear forwards;
+  }
+
+  @keyframes fill {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+  }
+
+  /* ---------- QR card ---------- */
+  .qr-card {
+    display: flex;
+    align-items: center;
+    gap: 3vmin;
+    padding: 2.4vmin;
+    background: linear-gradient(135deg, rgba(245, 197, 24, 0.14), rgba(245, 197, 24, 0.02));
+    border: 0.3vmin solid var(--yellow);
+    align-self: flex-start;
+    animation: rise 0.9s 0.8s cubic-bezier(.2, .9, .3, 1.2) both;
+  }
+
+  .qr {
+    position: relative;
+    width: 22vmin;
+    aspect-ratio: 1;
+    background: #fff;
+    padding: 0.6vmin;
+    flex-shrink: 0;
+  }
+
+  .qr-svg { display: block; width: 100%; height: 100%; }
+
+  .qr::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0.5vmin;
+    background: var(--yellow);
+    box-shadow: 0 0 2vmin 0.6vmin rgba(245, 197, 24, 0.7);
+    animation: scan 2.8s ease-in-out infinite;
+    opacity: 0.85;
+  }
+
+  @keyframes scan {
+    0%, 100% { top: 2%; }
+    50%      { top: 96%; }
+  }
+
+  .qr-text .label {
+    font-family: "Anton", Impact, sans-serif;
+    font-size: 5vmin;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .qr-text .label span { color: var(--yellow); }
+
+  .qr-text .url {
+    margin-top: 1.2vmin;
+    font-size: 2.8vmin;
+    font-weight: 800;
+    color: var(--yellow);
+    letter-spacing: 0.02em;
+  }
+
+  .qr-text .hint {
+    margin-top: 0.8vmin;
+    font-size: 1.9vmin;
+    color: var(--muted);
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6vh); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* ---------- Bottom ticker ---------- */
+  .ticker {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: stretch;
+    height: 7vh;
+    background: var(--yellow);
+    color: var(--ink);
+    overflow: hidden;
+    transform: skewY(-0.6deg);
+    transform-origin: left;
+  }
+
+  .clock {
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 1.5vmin;
+    padding: 0 3vmin;
+    background: var(--ink);
+    color: var(--yellow);
+    font-family: "Anton", Impact, sans-serif;
+    font-size: 4vmin;
+    letter-spacing: 0.04em;
+  }
+
+  .clock small {
+    font-family: "Inter", sans-serif;
+    font-weight: 700;
+    font-size: 1.8vmin;
+    color: var(--white);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .track {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    animation: marquee 35s linear infinite;
+  }
+
+  .track span {
+    font-family: "Anton", Impact, sans-serif;
+    font-size: 3.6vmin;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0 2.5vmin;
+  }
+
+  .track span.bolt {
+    padding: 0;
+    font-size: 3vmin;
+  }
+
+  @keyframes marquee {
+    to { transform: translateX(-50%); }
+  }
+
+  /* ---------- Portrait screens ---------- */
+  @media (orientation: portrait) {
+    .stage {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+    .logo-box { width: min(80vw, 40vh); margin-top: 2vh; }
+    .panel { padding: 1vh 6vw 3vh; gap: 3vh; align-items: center; text-align: center; }
+    .slides { width: 100%; height: 22vh; }
+    .ticker { height: 5vh; }
+    .slide { align-items: center; }
+    .dots { justify-content: center; }
+    .qr-card { align-self: center; text-align: left; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="bg"></div>
+  <canvas id="sparks"></canvas>
+
+  <main class="stage">
+    <section class="logo-wrap">
+      <div class="logo-box" id="logoBox">
+        <div class="glow"></div>
+        <div class="ring"></div>
+        <div class="ring two"></div>
+        <img class="logo" src="logo.webp" alt="9T9 Media">
+        <div class="shine"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="slides" id="slides">
+        <!-- Edit these slides to change the rotating messages. -->
+        <article class="slide">
+          <p class="kicker">9T9 Media</p>
+          <h1 class="headline">Media that <em>hits</em><br>different.</h1>
+          <p class="sub">Bold content, built to stop the scroll and own the screen.</p>
+        </article>
+        <article class="slide">
+          <p class="kicker">Video &amp; Content</p>
+          <h1 class="headline">Your story,<br><em>amplified.</em></h1>
+          <p class="sub">Video production, photography and content that moves people.</p>
+        </article>
+        <article class="slide">
+          <p class="kicker">Digital Signage</p>
+          <h1 class="headline">Screens that<br><em>sell.</em></h1>
+          <p class="sub">Eye-catching displays for stores, venues, offices and events.</p>
+        </article>
+        <article class="slide">
+          <p class="kicker">Brand &amp; Social</p>
+          <h1 class="headline">Be seen.<br><em>Be loud.</em></h1>
+          <p class="sub">Branding and social media that makes your name impossible to miss.</p>
+        </article>
+      </div>
+
+      <div class="dots" id="dots"></div>
+
+      <div class="qr-card">
+        <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 330 330" role="img" aria-label="QR code linking to 9t9media.co.za" class="qr-svg"><g transform="scale(10)"><path fill="#fff" d="M0 0h33v33h-33z"/><path class="qrline" stroke="#0a0a0a" d="M2 2.5h7m2 0h4m1 0h2m2 0h3m1 0h7m-29 1h1m5 0h1m2 0h3m2 0h2m2 0h3m1 0h1m5 0h1m-29 1h1m1 0h3m1 0h1m1 0h1m2 0h1m4 0h1m2 0h1m2 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m1 0h3m1 0h3m2 0h1m4 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m3 0h2m1 0h1m2 0h1m1 0h3m1 0h1m1 0h3m1 0h1m-29 1h1m5 0h1m4 0h1m2 0h1m1 0h1m5 0h1m5 0h1m-29 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-20 1h2m1 0h2m1 0h1m1 0h3m-17 1h2m1 0h2m1 0h1m1 0h2m2 0h2m2 0h1m5 0h2m-25 1h2m4 0h3m3 0h1m1 0h3m1 0h1m2 0h5m-27 1h2m3 0h1m2 0h1m3 0h2m3 0h1m2 0h2m3 0h1m-27 1h1m4 0h1m2 0h4m1 0h4m1 0h1m4 0h3m2 0h1m-29 1h1m2 0h4m3 0h2m1 0h2m1 0h4m1 0h2m2 0h1m1 0h1m-27 1h1m5 0h2m2 0h2m1 0h1m7 0h1m1 0h1m1 0h1m1 0h1m-26 1h4m3 0h3m3 0h1m2 0h2m2 0h1m1 0h1m2 0h1m-27 1h1m1 0h1m5 0h1m1 0h1m1 0h3m1 0h1m1 0h2m2 0h5m-29 1h1m4 0h5m1 0h1m4 0h1m2 0h3m1 0h1m1 0h1m-26 1h1m3 0h1m3 0h1m3 0h2m3 0h4m3 0h1m1 0h1m-27 1h3m3 0h1m6 0h1m1 0h2m1 0h3m2 0h1m2 0h1m1 0h1m-29 1h2m1 0h2m3 0h1m1 0h1m1 0h2m2 0h3m1 0h4m2 0h1m1 0h1m-29 1h4m2 0h3m1 0h1m2 0h2m3 0h1m1 0h7m1 0h1m-21 1h2m1 0h1m1 0h1m1 0h1m1 0h4m3 0h3m-27 1h7m1 0h2m2 0h1m3 0h1m1 0h3m1 0h1m1 0h1m1 0h1m-27 1h1m5 0h1m2 0h2m2 0h1m4 0h1m1 0h1m3 0h2m1 0h2m-29 1h1m1 0h3m1 0h1m1 0h1m3 0h2m2 0h9m-25 1h1m1 0h3m1 0h1m1 0h3m7 0h1m4 0h1m1 0h3m-28 1h1m1 0h3m1 0h1m2 0h3m1 0h1m4 0h1m1 0h2m1 0h2m2 0h2m-29 1h1m5 0h1m2 0h1m1 0h1m1 0h1m3 0h1m1 0h1m1 0h1m2 0h1m1 0h1m1 0h1m-29 1h7m3 0h4m3 0h1m1 0h6"/></g></svg></div>
+        <div class="qr-text">
+          <p class="label">Scan <span>&amp;</span><br>connect</p>
+          <p class="url">9t9media.co.za</p>
+          <p class="hint">Point your phone camera at the code</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="ticker">
+      <div class="clock"><span id="time">--:--</span><small id="date"></small></div>
+      <div class="track" id="track"></div>
+    </footer>
+  </main>
+
+<script>
+  const SLIDE_MS = 7000;
+  const TICKER = [
+    "9T9 Media",
+    "Video Production",
+    "Digital Signage",
+    "Branding",
+    "Social Media",
+    "Photography",
+    "9t9media.co.za",
+  ];
+
+  document.documentElement.style.setProperty("--slide-ms", SLIDE_MS + "ms");
+
+  // Rotating slides
+  const slides = [...document.querySelectorAll(".slide")];
+  const dotsEl = document.getElementById("dots");
+  const dots = slides.map(() => {
+    const d = document.createElement("span");
+    d.className = "dot";
+    dotsEl.appendChild(d);
+    return d;
+  });
+  const logoBox = document.getElementById("logoBox");
+  let current = -1;
+
+  function show(next) {
+    if (current >= 0) {
+      const prev = slides[current];
+      prev.classList.remove("active");
+      prev.classList.add("leaving");
+      setTimeout(() => prev.classList.remove("leaving"), 800);
+      dots[current].classList.remove("active");
+    }
+    current = next;
+    slides[current].classList.add("active");
+    // restart the progress bar animation
+    void dots[current].offsetWidth;
+    dots[current].classList.add("active");
+
+    logoBox.classList.remove("shake");
+    void logoBox.offsetWidth;
+    logoBox.classList.add("shake");
+    burst();
+  }
+
+  setTimeout(() => show(0), 700);
+  setInterval(() => show((current + 1) % slides.length), SLIDE_MS);
+
+  // Ticker (content doubled for a seamless loop)
+  const bolt = '<span class="bolt">⚡</span>';
+  const run = TICKER.map(t => `<span>${t}</span>`).join(bolt) + bolt;
+  document.getElementById("track").innerHTML = run + run + run + run;
+
+  // Clock (South Africa time)
+  const tz = "Africa/Johannesburg";
+  const timeFmt = new Intl.DateTimeFormat("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz });
+  const dateFmt = new Intl.DateTimeFormat("en-ZA", { weekday: "short", day: "numeric", month: "short", timeZone: tz });
+  function tick() {
+    const now = new Date();
+    document.getElementById("time").textContent = timeFmt.format(now);
+    document.getElementById("date").textContent = dateFmt.format(now);
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  // Sparks / embers
+  const canvas = document.getElementById("sparks");
+  const ctx = canvas.getContext("2d");
+  let W, H, particles = [];
+
+  function resize() {
+    W = canvas.width = innerWidth * devicePixelRatio;
+    H = canvas.height = innerHeight * devicePixelRatio;
+  }
+  addEventListener("resize", resize);
+  resize();
+
+  function spawn(x, y, speed) {
+    const a = Math.random() * Math.PI * 2;
+    const v = (Math.random() * 0.8 + 0.2) * speed;
+    particles.push({
+      x, y,
+      vx: Math.cos(a) * v,
+      vy: Math.sin(a) * v - speed * 0.3,
+      life: 1,
+      decay: 0.006 + Math.random() * 0.012,
+      r: (Math.random() * 2 + 0.8) * devicePixelRatio,
+    });
+  }
+
+  function logoCenter() {
+    const r = logoBox.getBoundingClientRect();
+    return [(r.left + r.width / 2) * devicePixelRatio, (r.top + r.height / 2) * devicePixelRatio, r.width * devicePixelRatio];
+  }
+
+  function burst() {
+    const [cx, cy, w] = logoCenter();
+    for (let i = 0; i < 70; i++) {
+      const a = Math.random() * Math.PI * 2;
+      spawn(cx + Math.cos(a) * w * 0.42, cy + Math.sin(a) * w * 0.42, 6 * devicePixelRatio);
+    }
+  }
+
+  function frame() {
+    // ambient embers drifting up
+    if (particles.length < 160 && Math.random() < 0.5) {
+      particles.push({
+        x: Math.random() * W, y: H + 10,
+        vx: (Math.random() - 0.5) * 0.4, vy: -(Math.random() * 1.2 + 0.4) * devicePixelRatio,
+        life: 1, decay: 0.003 + Math.random() * 0.004,
+        r: (Math.random() * 1.6 + 0.5) * devicePixelRatio,
+      });
+    }
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.985;
+      p.vy = p.vy * 0.985 + 0.02;
+      p.life -= p.decay;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      ctx.fillStyle = `rgba(245, ${170 + Math.floor(p.life * 60)}, 30, ${p.life})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) frame();
+
+  // Refresh hourly so content updates are picked up on unattended screens
+  setTimeout(() => location.reload(), 60 * 60 * 1000);
+</script>
+</body>
+</html>
