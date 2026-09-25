@@ -368,25 +368,6 @@ p { margin: 0; color: var(--muted); text-wrap: pretty; }
   border: 1px solid rgba(62,200,255,0.3);
 }
 
-/* Marquee ----------------------------------------------------------------- */
-.marquee {
-  border-block: 1px solid var(--line);
-  overflow: hidden; padding: 22px 0;
-  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
-}
-.marquee__track {
-  display: flex; gap: 56px; width: max-content;
-  animation: marquee 110s linear infinite;
-}
-.marquee:hover .marquee__track { animation-play-state: paused; }
-.marquee__track span {
-  font-family: var(--font-display); font-size: clamp(14px, 1.6vw, 18px); color: var(--accent);
-  white-space: nowrap; display: inline-flex; align-items: center; gap: 56px;
-}
-.marquee__track span::after { content: "✦"; color: #fff; font-size: 10px; }
-@keyframes marquee { to { transform: translateX(-50%); } }
-
 /* Process / timeline ------------------------------------------------------ */
 .steps { display: grid; gap: 16px; counter-reset: step; }
 @media (min-width: 900px) { .steps { grid-template-columns: repeat(4, 1fr); } }
