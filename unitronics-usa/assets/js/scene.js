@@ -5,7 +5,7 @@
    frame into that element's own 2D canvas. One GPU context keeps phones fast,
    and only models that are on screen are built and rendered.
 
-   Usage: <div data-scene="chip|rack|gyro|display|totem|globe|ledwall|devboard|switch|cctv|spanner"></div>
+   Usage: <div data-scene="chip|rack|gyro|display|totem|globe|ledwall|devboard|switch|cctv|repair"></div>
    ========================================================================== */
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -517,60 +517,188 @@ function cctv() {
   };
 }
 
-/* SPANNER — combination spanner turning a hex bolt (support & maintenance) */
-function spanner() {
+/* REPAIR — a TV splits open, the view zooms onto the mainboard and a
+   failed capacitor is flagged red, then repaired (support & maintenance) */
+function repair() {
   const g = new THREE.Group();
-  g.add(mesh(rbox(3.6, 0.14, 2.2, 0.04), M.steel(0x4a5058, 0.45), 0, -0.07, 0));
-  const boltHead = (x, z) => {
-    const b = new THREE.Group();
-    b.add(mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.04, 40), M.steel(0xc7ccd3, 0.25), 0, 0.02, 0));
-    b.add(mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 6), M.steel(0xb7bdc5, 0.22), 0, 0.13, 0));
-    b.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.1, 24), M.steel(0x9da3ac, 0.3), 0, 0.25, 0));
-    b.position.set(x, 0, z);
-    g.add(b);
-    return b;
+  const W = 3.2, H = 1.85, r = rng(17);
+
+  // Screen content shared by both halves of the panel.
+  const [sc, sx] = makeCanvas(1024, 592);
+  const screenTex = tex(sc);
+  let screenState = "";
+  const paintScreen = (state, t) => {
+    const key = state + (state === "normal" ? Math.floor(t * 20) : state === "flicker" ? Math.floor(t * 30) : "");
+    if (key === screenState) return;
+    screenState = key;
+    const w = 1024, h = 592;
+    if (state === "normal") {
+      const gr = sx.createLinearGradient(0, 0, w, h);
+      gr.addColorStop(0, "#0b2238"); gr.addColorStop(1, "#05070c");
+      sx.fillStyle = gr; sx.fillRect(0, 0, w, h);
+      sx.strokeStyle = "rgba(120,190,255,0.08)"; sx.lineWidth = 1;
+      const off = (t * 20) % 48;
+      for (let x = -off; x < w; x += 48) { sx.beginPath(); sx.moveTo(x, 0); sx.lineTo(x, h); sx.stroke(); }
+      sx.fillStyle = "#fff"; sx.textAlign = "center"; sx.textBaseline = "middle";
+      sx.font = "400 96px Michroma, sans-serif"; sx.fillText("UNITRONICS", w / 2, h * 0.45);
+      sx.fillStyle = "#3ec8ff"; sx.font = "400 26px Michroma, sans-serif"; sx.fillText("SUPPORT  &  MAINTENANCE", w / 2, h * 0.62);
+    } else if (state === "flicker") {
+      sx.fillStyle = r() < 0.5 ? "#000" : "#1a0506"; sx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 30; i++) { sx.fillStyle = `rgba(255,${r() * 80 | 0},${r() * 80 | 0},${r() * 0.5})`; sx.fillRect(0, r() * h, w, 2 + r() * 12); }
+      sx.fillStyle = "#ff3b3b"; sx.textAlign = "center"; sx.textBaseline = "middle";
+      sx.font = "400 56px Michroma, sans-serif"; sx.fillText("FAULT DETECTED", w / 2 + (r() - 0.5) * 20, h / 2);
+    } else {
+      sx.fillStyle = "#020203"; sx.fillRect(0, 0, w, h);
+    }
+    screenTex.needsUpdate = true;
   };
-  const main = boltHead(-0.9, 0);
-  [[1.4, 0.75], [1.4, -0.75], [-1.5, 0.8]].forEach(([x, z]) => { boltHead(x, z).rotation.y = x; });
+  paintScreen("normal", 0);
 
-  // Spanner outline: ring end (hex bore) + tapered handle + open jaw.
-  const L = 2.6, ringR = 0.34, hexR = 0.235;
-  const ring = new THREE.Shape(); ring.absarc(0, 0, ringR, 0, Math.PI * 2, false);
-  const hole = new THREE.Path();
-  for (let i = 0; i <= 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    i ? hole.lineTo(Math.cos(a) * hexR, Math.sin(a) * hexR) : hole.moveTo(Math.cos(a) * hexR, Math.sin(a) * hexR);
-  }
-  ring.holes.push(hole);
-  const handle = new THREE.Shape();
-  handle.moveTo(0.28, -0.13); handle.lineTo(L - 0.3, -0.1); handle.lineTo(L - 0.3, 0.1); handle.lineTo(0.28, 0.13); handle.closePath();
-  const jawR = 0.36, s = 0.2, a0 = Math.asin(s / jawR);
-  const jaw = new THREE.Shape();
-  jaw.moveTo(L + Math.cos(a0) * jawR, s);
-  jaw.absarc(L, 0, jawR, a0, Math.PI * 2 - a0, false);
-  jaw.lineTo(L - 0.05, -s); jaw.lineTo(L - 0.05, s); jaw.closePath();
-  const bevel = { bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025, bevelSegments: 3, curveSegments: 48 };
-  const chromeMat = M.chrome(0xdfe3e8, 0.14);
-  const tool = new THREE.Group();
-  const add = (shape, depth, y) => { const m = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth, ...bevel }), chromeMat); m.rotation.x = -Math.PI / 2; m.position.y = y; tool.add(m); };
-  add(ring, 0.12, 0.0); add(handle, 0.07, 0.025); add(jaw, 0.1, 0.01);
-  const et = decal([["UNITRONICS", 0.5], ["CR-V  ·  13 MM", 0.24, "Inter", 600, 0.84]], 1.4, 0.16, { color: 0x6c727b, rough: 0.5 });
-  et.rotation.x = -Math.PI / 2; et.position.set(1.3, 0.127, 0); tool.add(et);
-  const pivot = new THREE.Group(); pivot.position.set(-0.9, 0.12, 0); pivot.add(tool); g.add(pivot);
+  // Rear housing and inner chassis.
+  const shell = M.plastic(0x111215, 0.5), DZ = 0.5;
+  g.add(mesh(rbox(W, H, 0.04, 0.02), shell, 0, 0, -DZ));
+  [-1, 1].forEach((sd) => {
+    g.add(mesh(new THREE.BoxGeometry(W, 0.04, DZ - 0.05), shell, 0, sd * (H / 2 - 0.02), -DZ / 2 - 0.02));
+    g.add(mesh(new THREE.BoxGeometry(0.04, H, DZ - 0.05), shell, sd * (W / 2 - 0.02), 0, -DZ / 2 - 0.02));
+  });
+  g.add(mesh(new THREE.PlaneGeometry(W - 0.1, H - 0.1), M.steel(0x6c727a, 0.45), 0, 0, -DZ + 0.021));
 
-  let boltAngle = 0, prev = 0;
+  // A board: textured PCB with components added by the caller.
+  const board = (bw, bh, seed, centre) => {
+    const traces = [];
+    const rr = rng(seed);
+    for (let i = 0; i < 110; i++) {
+      let x = centre[0] + (rr() - 0.5) * 0.15, y = centre[1] + (rr() - 0.5) * 0.15;
+      const pts = [[x, y]];
+      for (let k = 0; k < 3; k++) {
+        const dir = Math.floor(rr() * 8) * (Math.PI / 4), len = 0.05 + rr() * 0.25;
+        x = Math.min(0.97, Math.max(0.03, x + Math.cos(dir) * len)); y = Math.min(0.97, Math.max(0.03, y + Math.sin(dir) * len));
+        pts.push([x, y]);
+      }
+      traces.push({ pts, w: 1.5 + rr() * 2 });
+    }
+    const map = pcbTexture(1024, Math.round(1024 * (bh / bw)), seed, traces, (a, w, h) => {
+      a.fillStyle = "rgba(225,230,236,0.7)"; a.font = "400 22px Michroma, sans-serif"; a.fillText("UNITRONICS", 24, h - 26);
+    });
+    const pb = pulseBoard(map, 1024, Math.round(1024 * (bh / bw)), traces, centre);
+    const grp = new THREE.Group();
+    grp.add(mesh(rbox(bw, bh, 0.02, 0.005), M.plastic(0x0a1310, 0.55), 0, 0, 0));
+    grp.add(mesh(new THREE.PlaneGeometry(bw - 0.01, bh - 0.01), pb.mat, 0, 0, 0.0105));
+    return { grp, pb };
+  };
+  const zCyl = (rad, h, mat, x, y, z) => { const m = mesh(new THREE.CylinderGeometry(rad, rad, h, 28), mat, x, y, z); m.rotation.x = Math.PI / 2; return m; };
+  const capSleeve = M.plastic(0x1b1d22, 0.35), capTop = M.steel(0xb7bdc5, 0.3);
+  const cap = (rad, h, x, y, zb) => {
+    const c = new THREE.Group();
+    c.add(zCyl(rad, h, capSleeve, x, y, zb + h / 2));
+    c.add(zCyl(rad * 0.98, 0.006, capTop, x, y, zb + h + 0.003));
+    return c;
+  };
+
+  // Mainboard (with the fault) on the right.
+  const main = board(1.25, 0.8, 5, [0.35, 0.55]);
+  main.grp.position.set(0.72, -0.22, -DZ + 0.035); g.add(main.grp);
+  const zb = 0.011;
+  const soc = mesh(rbox(0.22, 0.22, 0.03, 0.006), M.plastic(0x16181b, 0.4), -0.18, 0.04, zb + 0.015); main.grp.add(soc);
+  const fins = new THREE.Group();
+  for (let i = 0; i < 9; i++) fins.add(mesh(new THREE.BoxGeometry(0.012, 0.28, 0.09), M.steel(0xc5cad1, 0.3), -0.29 + i * 0.028, 0.04, zb + 0.08));
+  fins.add(mesh(new THREE.BoxGeometry(0.26, 0.28, 0.012), M.steel(0xc5cad1, 0.3), -0.18, 0.04, zb + 0.036));
+  main.grp.add(fins);
+  [[0.2, 0.22], [0.28, 0.22], [0.36, 0.22], [0.2, -0.22], [0.36, -0.22]].forEach(([x, y]) => main.grp.add(cap(0.035, 0.1, x, y, zb)));
+  for (let i = 0; i < 4; i++) main.grp.add(mesh(new THREE.BoxGeometry(0.1, 0.05, 0.04), M.plastic(0xe8e3d6, 0.5), -0.5 + i * 0.13, -0.33, zb + 0.02));
+  main.grp.add(mesh(new THREE.BoxGeometry(0.18, 0.08, 0.06), M.steel(0xaeb4bd, 0.3), 0.52, 0.28, zb + 0.03));
+  // The failed capacitor: bulged vent, crusted electrolyte.
+  const fault = new THREE.Vector3(0.28, -0.12, zb);
+  const bad = cap(0.042, 0.12, fault.x, fault.y, zb); main.grp.add(bad);
+  const bulge = mesh(new THREE.SphereGeometry(0.041, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.steel(0x9e9a8f, 0.5), fault.x, fault.y, zb + 0.123);
+  bulge.rotation.x = Math.PI / 2; bulge.scale.set(1, 0.45, 1); main.grp.add(bulge);
+  const crust = mesh(new THREE.CircleGeometry(0.05, 24), M.plastic(0x4a2c14, 0.9), fault.x, fault.y, zb + 0.001); main.grp.add(crust);
+
+  const ringMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff2a2a, emissiveIntensity: 1.6 });
+  const ring = mesh(new THREE.TorusGeometry(0.085, 0.006, 12, 64), ringMat, fault.x, fault.y, zb + 0.14); main.grp.add(ring);
+  const ring2 = mesh(new THREE.TorusGeometry(0.11, 0.003, 8, 64), ringMat, fault.x, fault.y, zb + 0.14); main.grp.add(ring2);
+  const labelTex = (text, col) => {
+    const [c, x] = makeCanvas(512, 128);
+    x.fillStyle = col; x.beginPath(); x.roundRect(4, 4, 504, 120, 24); x.fill();
+    x.fillStyle = "#fff"; x.textAlign = "center"; x.textBaseline = "middle"; x.font = "400 50px Michroma, sans-serif";
+    x.fillText(text, 256, 68);
+    return tex(c);
+  };
+  const faultTex = labelTex("FAULT  C214", "#d62828"), fixedTex = labelTex("FIXED  ✓", "#1f9d55");
+  const label = mesh(new THREE.PlaneGeometry(0.3, 0.075), new THREE.MeshBasicMaterial({ map: faultTex, transparent: true, depthWrite: false }), fault.x + 0.02, fault.y + 0.17, zb + 0.16);
+  main.grp.add(label);
+
+  // Power board on the left.
+  const psu = board(1.05, 0.85, 8, [0.5, 0.5]);
+  psu.grp.position.set(-0.78, -0.18, -DZ + 0.035); g.add(psu.grp);
+  psu.grp.add(cap(0.11, 0.3, -0.25, 0.12, zb), cap(0.06, 0.16, 0.05, 0.25, zb), cap(0.06, 0.16, 0.2, 0.25, zb));
+  psu.grp.add(mesh(rbox(0.22, 0.18, 0.16, 0.01), M.plastic(0xd9b43a, 0.6), 0.15, -0.1, zb + 0.08));
+  psu.grp.add(mesh(new THREE.BoxGeometry(0.26, 0.05, 0.19), M.steel(0x4b4f55, 0.4), 0.15, -0.1, zb + 0.095));
+  for (let i = 0; i < 6; i++) psu.grp.add(mesh(new THREE.BoxGeometry(0.012, 0.3, 0.12), M.steel(0xc5cad1, 0.3), -0.38 + i * 0.03, -0.18, zb + 0.06));
+
+  // T-con board and ribbon cables.
+  const tcon = board(1.7, 0.24, 3, [0.5, 0.5]);
+  tcon.grp.position.set(0, 0.62, -DZ + 0.035); g.add(tcon.grp);
+  const ribbon = M.plastic(0xd8d5cc, 0.6);
+  [-0.4, 0.4].forEach((x) => g.add(mesh(new THREE.BoxGeometry(0.16, 0.36, 0.004), ribbon, x * 0.6 + 0.4, 0.33, -DZ + 0.06)));
+
+  // Front panel in two halves.
+  const halves = [-1, 1].map((side) => {
+    const h = new THREE.Group();
+    h.add(mesh(rbox(W / 2, H, 0.05, 0.02), M.paint(0x0c0d10, 0.3), 0, 0, -0.025));
+    const pg = new THREE.PlaneGeometry(W / 2 - 0.04, H - 0.08);
+    const uv = pg.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, (side < 0 ? 0 : 0.5) + uv.getX(i) * 0.5);
+    const scr = mesh(pg, new THREE.MeshPhysicalMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: screenTex, emissiveIntensity: 1.1, roughness: 0.06, clearcoat: 1 }), side * -0.01, 0, 0.0005);
+    h.add(scr);
+    h.position.set(side * (W / 4), 0, 0.03);
+    g.add(h);
+    return { h, side };
+  });
+  const badge = decal([["UNITRONICS", 0.6]], 0.5, 0.07, { color: 0xb8bec7, rough: 0.3 });
+  badge.position.set(0, -H / 2 + 0.025, 0.056); halves[0].h.add(badge); badge.position.x = W / 4;
+
+  // Feet.
+  [-1.1, 1.1].forEach((x) => {
+    const f = mesh(rbox(0.08, 0.35, 0.5, 0.02), M.steel(0x2e3238, 0.4), x, -H / 2 - 0.12, -0.22); g.add(f);
+  });
+
+  const target = new THREE.Vector3().copy(fault).add(main.grp.position);
+  const L = 12;
+  const seg = (c, a, b) => clamp01((c - a) / (b - a));
   return {
-    object: g, camera: new THREE.Vector3(0.6, 4.2, 4.2), radius: 1.9, floorY: -0.14, startRotation: -0.25,
+    object: g, camera: new THREE.Vector3(0.9, 0.55, 6.2), radius: 1.85, floorY: -H / 2 - 0.3, startRotation: -0.22, noSpin: true,
     update(t, dt, p) {
-      const cyc = (t * 0.45 * (1 + p * 4)) % 1;
-      const fwd = cyc < 0.6;
-      const k = fwd ? ease(cyc / 0.6) : 1 - ease((cyc - 0.6) / 0.4);
-      const ang = -0.7 + k * 1.4;
-      tool.position.y = fwd ? 0 : Math.sin(((cyc - 0.6) / 0.4) * Math.PI) * 0.22;
-      pivot.rotation.y = -ang;
-      if (fwd) boltAngle += Math.max(0, ang - prev);
-      prev = ang;
-      main.rotation.y = -boltAngle;
+      const c = t % L;
+      const split = ease(seg(c, 2.6, 4)) * (1 - ease(seg(c, 10.5, 11.8)));
+      const zoom = ease(seg(c, 4, 5.6)) * (1 - ease(seg(c, 9, 10.5)));
+      const fixed = c > 8;
+      paintScreen(c < 2.1 || c > 11 ? "normal" : c < 2.8 ? "flicker" : "off", t);
+
+      halves.forEach(({ h, side }) => {
+        h.position.set(side * (W / 4 + split * 1.5), 0, 0.03 + split * 0.7);
+        h.rotation.y = -side * split * 0.5;
+      });
+
+      const s = 1 + zoom * 3.2;
+      g.scale.setScalar(s);
+      g.position.set(-target.x * s * zoom, -target.y * s * zoom, -target.z * s * zoom);
+
+      const show = c > 4.6 && c < 9.6;
+      ring.visible = ring2.visible = label.visible = show;
+      const col = fixed ? 0x22c55e : 0xff2a2a;
+      ringMat.emissive.setHex(col);
+      label.material.map = fixed ? fixedTex : faultTex;
+      const beat = fixed ? 1 : 1 + 0.25 * Math.abs(Math.sin(t * 5)) + p * 0.5;
+      ring.scale.setScalar(beat); ring2.scale.setScalar(2 - beat * 0.9);
+      ringMat.emissiveIntensity = fixed ? 1.4 : 0.9 + Math.abs(Math.sin(t * 5)) * 1.4;
+
+      [main.pb, psu.pb, tcon.pb].forEach((b) => { b.U.uTime.value = t; b.U.uPulse.value = p; });
+      main.pb.mat.emissive.setHex(show && !fixed ? 0xff3030 : 0x3ec8ff);
+      const hot = show && !fixed;
+      bulge.visible = !fixed; crust.visible = !fixed;
+      bad.children[1].visible = fixed;
+      bad.children[0].material = hot ? capSleeve : capSleeve;
     },
   };
 }
@@ -773,7 +901,7 @@ function globe() {
 }
 
 const SCENES = {
-  chip, ledwall, devboard, switch: netswitch, cctv, spanner, rack, gyro, globe,
+  chip, ledwall, devboard, switch: netswitch, cctv, repair, rack, gyro, globe,
   display: display(false), totem: display(true),
 };
 
@@ -962,7 +1090,7 @@ class View {
     this.pulse = Math.max(0, this.pulse - dt * 0.6);
     this.velY *= Math.pow(0.04, dt);
     this.rotY += this.velY * dt * 8;
-    if (!reduceMotion) this.rotY += dt * (this.hero ? 0.1 : 0.14);
+    if (!reduceMotion && !this.def.noSpin) this.rotY += dt * (this.hero ? 0.1 : 0.14);
     this.tilt.lerp(this.tiltTarget, 1 - Math.pow(0.001, dt));
     this.spin.rotation.y = this.rotY + this.tilt.x * 0.25;
     this.spin.rotation.x = -this.tilt.y * 0.1;
