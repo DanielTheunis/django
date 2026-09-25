@@ -58,7 +58,7 @@
         const x = e.clientX - r.left, y = e.clientY - r.top;
         card.style.setProperty("--mx", `${x}px`);
         card.style.setProperty("--my", `${y}px`);
-        if (!reduceMotion && card.classList.contains("card")) {
+        if (!reduceMotion && card.classList.contains("card") && !card.querySelector(".card__stage, .service__stage")) {
           const rx = ((y / r.height) - 0.5) * -5;
           const ry = ((x / r.width) - 0.5) * 5;
           card.style.transform = `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg)`;
@@ -86,7 +86,7 @@
     const link = card.querySelector("a[href]");
     if (!link) return;
     card.addEventListener("click", (e) => {
-      if (e.target.closest("a")) return;
+      if (e.target.closest("a, .card__stage")) return;
       if (getSelection().toString()) return;
       link.click();
     });

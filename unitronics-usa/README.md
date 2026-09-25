@@ -19,7 +19,7 @@ A static, dark, interactive 3D website. There's no build step and nothing to ins
 
 ## Performance
 - The models are built in code (three.js r160 from jsDelivr), so there are no large 3D files to download.
-- PBR materials, studio environment lighting, ACES tone mapping and bloom.
+- Physically based materials, studio lighting and soft shadows (no glow or bloom). One shared WebGL renderer draws every model on the page.
 - A scene only renders while it's on screen. Phones get a lower pixel ratio and fewer particles.
 - If the device has no WebGL2, the page still works; only the 3D scenes are skipped.
 - Honors `prefers-reduced-motion`.
