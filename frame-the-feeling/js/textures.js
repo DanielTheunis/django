@@ -343,3 +343,34 @@ export function screen(img, { w = 1200, h = 800 } = {}) {
   }
   return toTexture(c);
 }
+
+// Roughness variation: soft handled patches and fine speckle, so reflections
+// break up the way they do on a camera that has been used.
+export function wearRoughness(size = 512, seed = 3) {
+  const [c, ctx] = makeCanvas(size, size);
+  const r = rng(seed);
+  ctx.fillStyle = 'rgb(232,232,232)';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 70; i++) {
+    const x = r() * size, y = r() * size, rad = 20 + r() * 90;
+    const v = 150 + r() * 60;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, `rgba(${v},${v},${v},0.35)`);
+    g.addColorStop(1, `rgba(${v},${v},${v},0)`);
+    ctx.fillStyle = g;
+    // draw wrapped so the texture tiles
+    for (const dx of [-size, 0, size]) for (const dy of [-size, 0, size]) {
+      ctx.save();
+      ctx.translate(dx, dy);
+      ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      ctx.restore();
+    }
+  }
+  const img = ctx.getImageData(0, 0, size, size);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (r() - 0.5) * 26;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.max(0, Math.min(255, img.data[i] + n));
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTexture(c, { color: false, repeat: [2, 2] });
+}

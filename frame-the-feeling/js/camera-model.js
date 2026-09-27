@@ -130,12 +130,13 @@ function extrude(shape, depth, bevel, curveSegments = 24) {
 function makeMaterials(tex) {
   return {
     body: new THREE.MeshPhysicalMaterial({
-      color: 0x16191b, roughness: 0.46, metalness: 0.2, clearcoat: 0.35, clearcoatRoughness: 0.4,
-      normalMap: tex.grain, normalScale: new V2(0.18, 0.18),
+      color: 0x1d2022, roughness: 0.58, metalness: 0.12, clearcoat: 0.18, clearcoatRoughness: 0.55,
+      normalMap: tex.grain, normalScale: new V2(0.32, 0.32), roughnessMap: tex.wear,
+      specularIntensity: 0.6,
     }),
     leather: new THREE.MeshStandardMaterial({
-      color: 0x101314, roughness: 0.86, metalness: 0,
-      normalMap: tex.leather, normalScale: new V2(0.75, 0.75),
+      color: 0x141719, roughness: 0.9, metalness: 0, roughnessMap: tex.wear,
+      normalMap: tex.leather, normalScale: new V2(0.85, 0.85),
     }),
     rubber: new THREE.MeshStandardMaterial({
       color: 0x121516, roughness: 0.78, metalness: 0,
@@ -146,7 +147,8 @@ function makeMaterials(tex) {
       normalMap: tex.ribsFine, normalScale: new V2(0.9, 0.9),
     }),
     satin: new THREE.MeshPhysicalMaterial({
-      color: 0x1b1f22, roughness: 0.36, metalness: 0.55, clearcoat: 0.2,
+      color: 0x1e2225, roughness: 0.42, metalness: 0.5, clearcoat: 0.15, roughnessMap: tex.wear,
+      normalMap: tex.grain, normalScale: new V2(0.15, 0.15),
     }),
     metal: new THREE.MeshStandardMaterial({ color: 0xc9d2d5, roughness: 0.22, metalness: 1 }),
     metalDark: new THREE.MeshStandardMaterial({ color: 0x2c3236, roughness: 0.32, metalness: 0.9 }),
@@ -240,6 +242,7 @@ export function buildCamera({ wordmark, screenImage, anisotropy = 8 }) {
   TX.setAnisotropy(anisotropy);
   const tex = {
     grain: TX.grainNormal(),
+    wear: TX.wearRoughness(),
     leather: TX.leatherNormal(),
     ribs: TX.ribNormal(110, 0.35),
     ribsFine: TX.ribNormal(220, 0.6),
@@ -280,6 +283,9 @@ export function buildCamera({ wordmark, screenImage, anisotropy = 8 }) {
   frontShell.add(panelMesh);
   // mount flange
   frontShell.add(mesh(tube(0.29, 0.255, 0, 0.012), M.metal, [AX, AY, FRONT - 0.002]));
+  // lens release button and the front command dial set into the grip
+  frontShell.add(mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.016, 32), M.satin, [-0.23, -0.24, FRONT + 0.006], [Math.PI / 2, 0, 0]));
+  frontShell.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 60), M.knurl, [-0.47, 0.3, 0.405], [0, 0, 0]));
   // grip
   const grip = mesh(new RoundedBoxGeometry(0.32, 0.74, 0.3, 6, 0.12), M.leather, [-0.47, -0.02, 0.26]);
   frontShell.add(grip);
@@ -300,6 +306,19 @@ export function buildCamera({ wordmark, screenImage, anisotropy = 8 }) {
   rearShell.add(mesh(new RoundedBoxGeometry(0.2, 0.26, 0.04, 4, 0.02), M.leather, [-0.47, 0.14, BACK - 0.005]));
   const wheel = mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.03, 48), M.knurl, [-0.47, -0.16, BACK - 0.01], [Math.PI / 2, 0, 0]);
   rearShell.add(wheel);
+  // rear controls: AF-ON, AEL, joystick, menu buttons, top rear dial
+  const btn = (r, h, x, y, mat = M.satin) =>
+    rearShell.add(mesh(new THREE.CylinderGeometry(r, r, h, 32), mat, [x, y, BACK - h / 2 + 0.002], [Math.PI / 2, 0, 0]));
+  btn(0.034, 0.02, -0.33, 0.25);
+  btn(0.03, 0.018, -0.2, 0.25);
+  btn(0.022, 0.03, -0.3, 0.02, M.rubber);
+  btn(0.024, 0.014, -0.52, -0.33);
+  btn(0.024, 0.014, 0.52, 0.3);
+  btn(0.024, 0.014, 0.44, 0.3);
+  rearShell.add(mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.035, 60), M.knurl, [-0.52, TOP - 0.01, BACK + 0.04]));
+  // memory card door on the grip side and a port cover on the other
+  rearShell.add(mesh(new RoundedBoxGeometry(0.014, 0.3, 0.17, 3, 0.006), M.satin, [-0.633, 0.03, -0.1]));
+  rearShell.add(mesh(new RoundedBoxGeometry(0.014, 0.44, 0.2, 3, 0.006), M.leather, [0.633, -0.04, -0.09]));
   add(root, rearShell, { off: [0, 0, -0.34], win: [0.4, 0.86], float: 0.6 });
 
   // ---------- internals (hidden until the shells separate) ----------
@@ -432,6 +451,9 @@ export function buildCamera({ wordmark, screenImage, anisotropy = 8 }) {
 
   const frontBarrel = new THREE.Group();
   frontBarrel.add(mesh(tube(0.292, 0.222, 0.58, 0.08), M.satin));
+  // matte baffles inside the barrel give the glass some depth
+  frontBarrel.add(mesh(tube(0.222, 0.205, 0.55, 0.012, 0.002), M.interior));
+  frontBarrel.add(mesh(tube(0.222, 0.198, 0.5, 0.012, 0.002), M.interior));
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.226, 0.288, 128),
     new THREE.MeshBasicMaterial({
@@ -487,6 +509,15 @@ export function buildCamera({ wordmark, screenImage, anisotropy = 8 }) {
     sensor: die,
     body: hump,
   };
+
+  // self-shadowing: every opaque part casts and receives
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    const opaque = mats.every((m) => !m.transparent);
+    o.castShadow = opaque;
+    o.receiveShadow = opaque;
+  });
 
   let explode = 0;
   const state = {

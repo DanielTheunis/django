@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildCamera } from './camera-model.js';
 import { Ocean } from './ocean.js';
 
@@ -204,6 +203,31 @@ function openLoader() {
 // 3D stage
 // ---------------------------------------------------------------------------
 
+// A dark studio with a big overhead softbox and two strip lights, the way
+// cameras are lit for product photos. Its reflections give the lens barrel
+// and body edges long, clean highlights.
+function studioEnvironment() {
+  const env = new THREE.Scene();
+  const room = new THREE.Mesh(
+    new THREE.BoxGeometry(20, 12, 20),
+    new THREE.MeshBasicMaterial({ color: 0x1d2a2b, side: THREE.BackSide }),
+  );
+  env.add(room);
+  const panel = (w, h, pos, rot, strength, color = 0xffffff) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+    m.material.color.multiplyScalar(strength);
+    m.position.set(...pos);
+    m.rotation.set(...rot);
+    env.add(m);
+  };
+  panel(9, 6, [0, 5.9, 0], [Math.PI / 2, 0, 0], 4);                 // overhead softbox
+  panel(1.4, 8, [-7, 1, 3], [0, Math.PI / 2.4, 0], 6);              // left strip
+  panel(1.4, 8, [7, 1, 1], [0, -Math.PI / 2.2, 0], 3.5);            // right strip
+  panel(6, 3, [0, 1.5, 9.9], [0, Math.PI, 0], 1.2);                 // soft front fill
+  panel(20, 20, [0, -5.9, 0], [-Math.PI / 2, 0, 0], 0.55, 0x7fd8d2); // turquoise water below
+  return env;
+}
+
 async function boot() {
   const started = performance.now();
   setProgress(8);
@@ -251,20 +275,30 @@ async function boot() {
   camera.position.set(0, 0, CAM_Z);
 
   const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.9;
+  scene.environment = pmrem.fromScene(studioEnvironment(), 0.02).texture;
+  scene.environmentIntensity = 1.35;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const ocean = new Ocean({ count: finePointer ? 1400 : 800 });
   scene.add(ocean.background, ocean.particles);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x5fc9c3, 1.0));
-  const key = new THREE.SpotLight(0xffffff, 110, 0, 0.5, 0.75, 2);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8fd3cf, 0.55));
+  // sunlight through the surface: casts the caustics and the camera's own shadows
+  const key = new THREE.SpotLight(0xfffbf2, 120, 0, 0.5, 0.75, 2);
   key.position.set(1.4, 7, 3.2);
   key.map = ocean.causticTexture;
+  key.castShadow = true;
+  key.shadow.mapSize.set(finePointer ? 2048 : 1024, finePointer ? 2048 : 1024);
+  key.shadow.camera.near = 3;
+  key.shadow.camera.far = 14;
+  key.shadow.bias = -0.0004;
+  key.shadow.normalBias = 0.02;
+  key.shadow.radius = 4;
   scene.add(key, key.target);
-  const rim = new THREE.DirectionalLight(0xb4f7f1, 2.4);
+  const rim = new THREE.DirectionalLight(0xe6fbf9, 1.3);
   rim.position.set(-4, 2.5, -5);
-  const fill = new THREE.DirectionalLight(0xffffff, 0.8);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.75);
   fill.position.set(4, 0.5, 6);
   scene.add(rim, fill);
 
