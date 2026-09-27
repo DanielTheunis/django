@@ -9,7 +9,7 @@ in the lens.
 
 ## Open it
 
-**Quickest:** double-click `dist/frame-the-feeling.html`. Everything
+**Quickest:** double-click `dist/frame-the-feeling.html` (opening `index.html` from disk now forwards there automatically). Everything
 (Three.js, images, styles) is inside that one file, so it works straight from
 disk. It needs an internet connection only for the Google fonts.
 

@@ -25,6 +25,8 @@
 </script>
 <script>
   document.documentElement.classList.add('js', 'pre-snap');
+  // opened straight from disk, where modules can't load: use the single-file build
+  if (location.protocol === 'file:') location.replace('dist/frame-the-feeling.html');
   // if the 3D stage never boots (offline CDN, old browser), show the page anyway
   setTimeout(function () {
     if (window.__ftf) return;

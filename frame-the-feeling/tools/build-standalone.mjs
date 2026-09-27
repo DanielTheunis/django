@@ -42,6 +42,7 @@ html = html
   .replace(/<link rel="preconnect" href="https:\/\/cdn\.jsdelivr\.net" crossorigin>\n/, () => '')
   .replace('<link rel="stylesheet" href="css/site.css">', () => `<style>\n${css}\n</style>`)
   .replace('<script type="module" src="js/main.js"></script>', () => `<script>\n${script}\n</script>`);
+html = html.replace(/ *\/\/ opened straight from disk[^\n]*\n *if \(location\.protocol === 'file:'\)[^\n]*\n/, () => '');
 html = inline(html);
 
 await fs.mkdir(path.join(root, 'dist'), { recursive: true });
