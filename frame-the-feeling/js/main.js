@@ -290,8 +290,8 @@ async function boot() {
   const TAU = Math.PI * 2;
   const KEYS = [
     // at rest the lens pokes out to the right, so nudge left to centre what you see
-    { s: 0.0, e: 0, r: [0.16, 0.5, 0], p: [-0.025, 0], k: 1, P: { p: [-0.03, 0], r: [0.16, 0.5, 0], k: 1 } },
-    { s: 0.5, e: 0, r: [0.16, 0.5, 0], p: [-0.025, 0], k: 1, P: { p: [-0.03, 0], r: [0.16, 0.5, 0], k: 1 } },
+    { s: 0.0, e: 0, r: [0.16, 0.5, 0], p: [-0.042, 0], k: 1, P: { p: [-0.03, 0], r: [0.16, 0.5, 0], k: 1 } },
+    { s: 0.5, e: 0, r: [0.16, 0.5, 0], p: [-0.042, 0], k: 1, P: { p: [-0.03, 0], r: [0.16, 0.5, 0], k: 1 } },
     { s: 1.0, e: 0.02, r: [0.14, 0.8, 0.01], p: [0, 0], k: 0.94 },
     { s: 1.3, e: 0.41, r: [0.18, 0.91, 0.17], p: [0, 0], k: 0.76, P: { r: [0.18, 1.25, 1.2], p: [0, 0.1], k: 0.56 } },
     { s: 1.72, e: 1, r: [0.24, 1.08, 0.42], p: [0, 0], k: 0.5, P: { r: [0.2, 1.45, 1.5], p: [0, 0.1], k: 0.6 } },
@@ -301,8 +301,8 @@ async function boot() {
     { s: 3.3, e: 1, r: [0.44, 2.5, 1.2], p: [0, 0.22], k: 0.4, P: { r: [0.4, 2.45, 1.5], p: [0, 0.2], k: 0.46 } },
     { s: 4.2, e: 0.9, r: [0.3, 3.35, 0.15], p: [0, 0.12], k: 0.46, P: { r: [0.3, 3.3, 1.2], p: [0, 0.14], k: 0.58 } },
     { s: 5.0, e: 0.72, r: [0.2, 4.7, 0], p: [0, 0.02], k: 0.62, P: { r: [0.2, 4.7, 0.6], p: [0, 0.04], k: 0.72 } },
-    { s: 5.38, e: 0, r: [0.08, TAU + 0.3, 0], p: [0, 0.02], k: 1.0 },
-    { s: 5.75, e: 0, r: [0.08, TAU + 0.3, 0], p: [0, 0.02], k: 1.0 },
+    { s: 5.38, e: 0, r: [0.08, TAU + 0.3, 0], p: [-0.02, 0.04], k: 0.9 },
+    { s: 5.75, e: 0, r: [0.08, TAU + 0.3, 0], p: [-0.02, 0.04], k: 0.9 },
     { s: 6.25, e: 0, r: [0.14, TAU + 0.5, 0], p: [0, 0.06], k: 0.7, P: { r: [0.14, TAU + 0.5, 0], p: [0, 0.3], k: 0.56 } },
     { s: 99, e: 0, r: [0.14, TAU + 0.5, 0], p: [0, 0.06], k: 0.7, P: { r: [0.14, TAU + 0.5, 0], p: [0, 0.3], k: 0.56 } },
   ];
@@ -356,7 +356,7 @@ async function boot() {
   // -------------------------------------------------------------------------
   // Sizing
   // -------------------------------------------------------------------------
-  let W = 0, H = 0, visW = 1, visH = 1, baseScale = 1, portrait = false, dpr = 1, maxDpr = 2;
+  let W = 0, H = 0, visW = 1, visH = 1, baseScale = 1, apartScale = 1, portrait = false, dpr = 1, maxDpr = 2;
   function applyDpr() {
     renderer.setPixelRatio(dpr);
     renderer.setSize(W, H, false);
@@ -376,9 +376,13 @@ async function boot() {
     visH = 2 * CAM_Z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     visW = visH * camera.aspect;
     portrait = camera.aspect < 0.85;
-    const fitW = portrait ? 0.82 : 0.42;
-    const fitH = portrait ? 0.34 : W <= 1100 ? 0.4 : 0.5;
+    // assembled size, and the (smaller) size the exploded views are framed for
+    const fitW = portrait ? 0.95 : 0.53;
+    const fitH = portrait ? 0.42 : W <= 1100 ? 0.5 : 0.63;
     baseScale = Math.min((visW * fitW) / 1.7, (visH * fitH) / 1.05);
+    const apartW = portrait ? 0.82 : 0.42;
+    const apartH = portrait ? 0.34 : W <= 1100 ? 0.4 : 0.5;
+    apartScale = Math.min((visW * apartW) / 1.7, (visH * apartH) / 1.05);
     ocean.uniforms.uAspect.value = camera.aspect;
     ocean.particleUniforms.uPR.value = dpr;
     ocean.setSize(W, H, W > 1600 ? 0.4 : 0.5);
@@ -558,7 +562,7 @@ async function boot() {
   // -------------------------------------------------------------------------
   // Frame loop
   // -------------------------------------------------------------------------
-  const cur = { e: 0, r: [0.16, 0.5, 0], p: [-0.025, 0], k: 1, reveal: 0, px: 0, py: 0 };
+  const cur = { e: 0, r: [0.16, 0.5, 0], p: [-0.042, 0], k: 1, reveal: 0, px: 0, py: 0 };
   let finaleArmed = true;
   let last = performance.now();
   let time = 0;
@@ -637,7 +641,7 @@ async function boot() {
       cur.r[1] + turn + cur.px * 0.16 * drift,
       cur.r[2] + Math.sin(time * 0.45) * 0.012 * drift,
     );
-    rig.scale.setScalar(baseScale * cur.k);
+    rig.scale.setScalar(lerp(baseScale, apartScale, smooth(clamp(cur.e))) * cur.k);
 
     ocean.uniforms.uDepth.value = damp(ocean.uniforms.uDepth.value, clamp(s / 6.5), 3, dt);
     ocean.uniforms.uMouse.value.set(cur.px, cur.py);
