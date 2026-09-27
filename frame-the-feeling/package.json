@@ -1,0 +1,13 @@
+{
+  "name": "frame-the-feeling",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build-standalone.mjs",
+    "serve": "npx --yes http-server -c-1 -p 8080 ."
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10",
+    "three": "0.180.0"
+  }
+}
