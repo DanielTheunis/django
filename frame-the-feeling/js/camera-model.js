@@ -130,9 +130,9 @@ function extrude(shape, depth, bevel, curveSegments = 24) {
 function makeMaterials(tex) {
   return {
     body: new THREE.MeshPhysicalMaterial({
-      color: 0x1d2022, roughness: 0.58, metalness: 0.12, clearcoat: 0.18, clearcoatRoughness: 0.55,
-      normalMap: tex.grain, normalScale: new V2(0.32, 0.32), roughnessMap: tex.wear,
-      specularIntensity: 0.6,
+      color: 0x232427, roughness: 0.66, metalness: 0.3,
+      normalMap: tex.grain, normalScale: new V2(0.45, 0.45), roughnessMap: tex.wear,
+      specularIntensity: 0.55, sheen: 0.15, sheenRoughness: 0.8, sheenColor: new THREE.Color(0x303335),
     }),
     leather: new THREE.MeshStandardMaterial({
       color: 0x141719, roughness: 0.9, metalness: 0, roughnessMap: tex.wear,
@@ -147,10 +147,12 @@ function makeMaterials(tex) {
       normalMap: tex.ribsFine, normalScale: new V2(0.9, 0.9),
     }),
     satin: new THREE.MeshPhysicalMaterial({
-      color: 0x1e2225, roughness: 0.42, metalness: 0.5, clearcoat: 0.15, roughnessMap: tex.wear,
-      normalMap: tex.grain, normalScale: new V2(0.15, 0.15),
+      color: 0x1e2225, roughness: 0.5, metalness: 0.55, roughnessMap: tex.wear,
+      normalMap: tex.grain, normalScale: new V2(0.22, 0.22),
     }),
-    metal: new THREE.MeshStandardMaterial({ color: 0xc9d2d5, roughness: 0.22, metalness: 1 }),
+    metal: new THREE.MeshPhysicalMaterial({
+      color: 0xc3cacd, roughness: 0.3, metalness: 1, anisotropy: 0.7, roughnessMap: tex.wear,
+    }),
     metalDark: new THREE.MeshStandardMaterial({ color: 0x2c3236, roughness: 0.32, metalness: 0.9 }),
     copper: new THREE.MeshStandardMaterial({ color: 0xd9865a, roughness: 0.28, metalness: 1 }),
     interior: new THREE.MeshStandardMaterial({ color: 0x050607, roughness: 0.92, metalness: 0 }),
@@ -158,15 +160,22 @@ function makeMaterials(tex) {
       color: 0x1f2427, roughness: 0.34, metalness: 0.85,
       normalMap: tex.knurl, normalScale: new V2(1.4, 1.4),
     }),
+    // Real refracting glass: light bends through it and shows the barrel and
+    // iris behind, with the green/magenta sheen of multi-coating on top.
     glassFront: new THREE.MeshPhysicalMaterial({
-      color: 0x0a1a1f, roughness: 0.03, metalness: 0, transparent: true, opacity: 0.74,
-      iridescence: 1, iridescenceIOR: 1.65, iridescenceThicknessRange: [260, 540],
-      clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 2.4,
+      color: 0xffffff, roughness: 0.0, metalness: 0,
+      transmission: 1, thickness: 0.09, ior: 1.6,
+      attenuationColor: new THREE.Color(0x9fd6c8), attenuationDistance: 0.35,
+      specularIntensity: 1, specularColor: new THREE.Color(0xffffff),
+      iridescence: 1, iridescenceIOR: 1.38, iridescenceThicknessRange: [280, 420],
+      envMapIntensity: 1.8,
     }),
     glassClear: new THREE.MeshPhysicalMaterial({
-      color: 0xd6fbf7, roughness: 0.02, metalness: 0, transparent: true, opacity: 0.3,
-      iridescence: 0.8, iridescenceIOR: 1.45, iridescenceThicknessRange: [200, 460],
-      clearcoat: 1, envMapIntensity: 2, depthWrite: false, side: THREE.DoubleSide,
+      color: 0xffffff, roughness: 0.0, metalness: 0,
+      transmission: 1, thickness: 0.05, ior: 1.52,
+      attenuationColor: new THREE.Color(0xc4efe6), attenuationDistance: 0.6,
+      iridescence: 0.7, iridescenceIOR: 1.33, iridescenceThicknessRange: [240, 380],
+      envMapIntensity: 1.6, side: THREE.DoubleSide,
     }),
     blade: new THREE.MeshStandardMaterial({
       color: 0x0d1012, roughness: 0.5, metalness: 0.6, side: THREE.DoubleSide,
@@ -248,7 +257,7 @@ export function buildCamera({ wordmark, screenImage, anisotropy = 8 }) {
     ribsFine: TX.ribNormal(220, 0.6),
     knurl: TX.ribNormal(70, 0.4),
   };
-  tex.leather.repeat.set(2.2, 2.2);
+  tex.leather.repeat.set(4, 4);
   const M = makeMaterials(tex);
 
   const root = new THREE.Group();   // centring shift is applied here
@@ -514,7 +523,7 @@ export function buildCamera({ wordmark, screenImage, anisotropy = 8 }) {
   root.traverse((o) => {
     if (!o.isMesh) return;
     const mats = Array.isArray(o.material) ? o.material : [o.material];
-    const opaque = mats.every((m) => !m.transparent);
+    const opaque = mats.every((m) => !m.transparent && !(m.transmission > 0));
     o.castShadow = opaque;
     o.receiveShadow = opaque;
   });

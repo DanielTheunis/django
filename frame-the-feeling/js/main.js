@@ -245,6 +245,8 @@ async function boot() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.05;
+  // glass refraction samples a lower-resolution copy of the scene on phones
+  if ('transmissionResolutionScale' in renderer) renderer.transmissionResolutionScale = finePointer ? 1 : 0.5;
 
   const fontsReady = Promise.race([
     Promise.all([
