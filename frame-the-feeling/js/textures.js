@@ -9,11 +9,17 @@ const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
 const SANS = '"Instrument Sans", system-ui, sans-serif';
 const SERIF = '"Bodoni Moda", "Didot", Georgia, serif';
 
-function makeCanvas(w, h) {
+// Printed textures (text, dials, labels) are drawn at 2x so fine lettering
+// stays crisp on high-density screens; callers keep working in logical units.
+const PRINT_SCALE = 2;
+
+function makeCanvas(w, h, scale = 1) {
   const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  return [c, c.getContext('2d')];
+  c.width = w * scale;
+  c.height = h * scale;
+  const ctx = c.getContext('2d');
+  if (scale !== 1) ctx.scale(scale, scale);
+  return [c, ctx];
 }
 
 function toTexture(canvas, { color = true, repeat = null } = {}) {
@@ -55,7 +61,7 @@ function heightToNormal(h, w, hh, strength) {
 }
 
 // Pebbled leatherette: tileable cellular noise, raised cells with soft valleys.
-export function leatherNormal(size = 256, cells = 26) {
+export function leatherNormal(size = 1024, cells = 26) {
   const r = rng(11);
   const pts = [];
   for (let j = 0; j < cells; j++) {
@@ -87,7 +93,7 @@ export function leatherNormal(size = 256, cells = 26) {
 }
 
 // Very fine grain for the magnesium body panels.
-export function grainNormal(size = 256) {
+export function grainNormal(size = 512) {
   const r = rng(5);
   const h = new Float32Array(size * size);
   for (let i = 0; i < h.length; i++) h[i] = r();
@@ -102,12 +108,12 @@ export function grainNormal(size = 256) {
       b[y * size + x] = s / 9;
     }
   }
-  return toTexture(heightToNormal(b, size, size, 1.4), { color: false, repeat: [3, 3] });
+  return toTexture(heightToNormal(b, size, size, 1.4), { color: false, repeat: [1.5, 1.5] });
 }
 
 // Vertical ridges for zoom/focus rings and dial edges (u runs around the ring).
 export function ribNormal(ribs = 90, sharp = 0.5) {
-  const w = 1024, hh = 4;
+  const w = 4096, hh = 4;
   const h = new Float32Array(w * hh);
   for (let x = 0; x < w; x++) {
     const v = Math.pow(Math.abs(Math.sin((x / w) * Math.PI * ribs)), sharp);
@@ -135,7 +141,7 @@ function measureTracked(ctx, text, tracking) {
 
 // Printed band that wraps around a lens barrel.
 export function barrelBand(items, { w = 2048, h = 96, color = '#e9f2f2', accent = '#f08a6e', size = 38 } = {}) {
-  const [c, ctx] = makeCanvas(w, h);
+  const [c, ctx] = makeCanvas(w, h, PRINT_SCALE);
   ctx.textBaseline = 'middle';
   const step = w / items.length;
   items.forEach((item, i) => {
@@ -152,7 +158,7 @@ export function barrelBand(items, { w = 2048, h = 96, color = '#e9f2f2', accent 
 
 // Focal-length scale on the zoom ring.
 export function zoomScale({ w = 2048, h = 128 } = {}) {
-  const [c, ctx] = makeCanvas(w, h);
+  const [c, ctx] = makeCanvas(w, h, PRINT_SCALE);
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#e9f2f2';
   ctx.font = `600 44px ${MONO}`;
@@ -168,7 +174,7 @@ export function zoomScale({ w = 2048, h = 128 } = {}) {
 
 // Text set on a circle, for the front bezel of the lens.
 export function ringText(text, { size = 1024, radius = 0.4, color = '#e9f2f2', font = 34 } = {}) {
-  const [c, ctx] = makeCanvas(size, size);
+  const [c, ctx] = makeCanvas(size, size, PRINT_SCALE);
   ctx.translate(size / 2, size / 2);
   ctx.fillStyle = color;
   ctx.font = `500 ${font}px ${MONO}`;
@@ -193,7 +199,7 @@ export function ringText(text, { size = 1024, radius = 0.4, color = '#e9f2f2', f
 
 // Top face of a mode or exposure dial.
 export function dialFace(labels, { size = 512, accent = null } = {}) {
-  const [c, ctx] = makeCanvas(size, size);
+  const [c, ctx] = makeCanvas(size, size, PRINT_SCALE);
   ctx.fillStyle = '#16191b';
   ctx.fillRect(0, 0, size, size);
   ctx.translate(size / 2, size / 2);
@@ -223,7 +229,7 @@ export function dialFace(labels, { size = 512, accent = null } = {}) {
 
 // Circuit board with gold traces on a deep teal solder mask.
 export function pcb({ w = 1024, h = 680 } = {}) {
-  const [c, ctx] = makeCanvas(w, h);
+  const [c, ctx] = makeCanvas(w, h, PRINT_SCALE);
   const r = rng(21);
   ctx.fillStyle = '#0b3b3e';
   ctx.fillRect(0, 0, w, h);
@@ -264,7 +270,7 @@ export function pcb({ w = 1024, h = 680 } = {}) {
 
 // Battery and memory card labels.
 export function label(lines, { w = 512, h = 256, bg = '#111416', fg = '#e9f2f2', accent = '#36c5bf' } = {}) {
-  const [c, ctx] = makeCanvas(w, h);
+  const [c, ctx] = makeCanvas(w, h, PRINT_SCALE);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = accent;
@@ -280,7 +286,7 @@ export function label(lines, { w = 512, h = 256, bg = '#111416', fg = '#e9f2f2',
 
 // Small serif badge for the body front, where a model name would sit.
 export function badge(text, { w = 256, h = 128 } = {}) {
-  const [c, ctx] = makeCanvas(w, h);
+  const [c, ctx] = makeCanvas(w, h, PRINT_SCALE);
   ctx.fillStyle = '#e9f2f2';
   ctx.textBaseline = 'middle';
   ctx.font = `italic 500 86px ${SERIF}`;
@@ -292,7 +298,7 @@ export function badge(text, { w = 256, h = 128 } = {}) {
 
 // The rear LCD: live view of the brand artwork with a camera overlay.
 export function screen(img, { w = 1200, h = 800 } = {}) {
-  const [c, ctx] = makeCanvas(w, h);
+  const [c, ctx] = makeCanvas(w, h, PRINT_SCALE);
   ctx.fillStyle = '#082024';
   ctx.fillRect(0, 0, w, h);
   if (img) {
@@ -346,7 +352,7 @@ export function screen(img, { w = 1200, h = 800 } = {}) {
 
 // Roughness variation: soft handled patches and fine speckle, so reflections
 // break up the way they do on a camera that has been used.
-export function wearRoughness(size = 512, seed = 3) {
+export function wearRoughness(size = 1024, seed = 3) {
   const [c, ctx] = makeCanvas(size, size);
   const r = rng(seed);
   ctx.fillStyle = 'rgb(232,232,232)';

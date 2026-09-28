@@ -402,7 +402,10 @@ async function boot() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!initial && w === W && Math.abs(h - H) < 2) return;
     W = w; H = h;
-    maxDpr = Math.min(window.devicePixelRatio || 1, 2);
+    // render above screen density on desktops (supersampling keeps edges and
+    // lens print crisp); phones stay at up to 2x to protect battery and heat
+    const native = window.devicePixelRatio || 1;
+    maxDpr = finePointer ? Math.min(Math.max(native * 1.25, 1.5), 2.5) : Math.min(native, 2);
     if (initial) dpr = maxDpr;
     dpr = Math.min(dpr, maxDpr);
     renderer.setPixelRatio(dpr);
@@ -695,8 +698,11 @@ async function boot() {
     if (frames >= 60) {
       const avg = frameAcc / frames;
       if (now - lastAdapt > 2000 && intro.done) {
-        if (avg > 0.024 && dpr > 1) { dpr = Math.max(1, dpr - 0.25); applyDpr(); lastAdapt = now; }
-        else if (avg < 0.013 && dpr < maxDpr) { dpr = Math.min(maxDpr, dpr + 0.25); applyDpr(); lastAdapt = now; }
+        // only give up resolution when the page is genuinely struggling (<30fps),
+        // never below native density on a desktop, and win it back when it recovers
+        const floor = finePointer ? Math.min(window.devicePixelRatio || 1, maxDpr) : 1;
+        if (avg > 0.034 && dpr > floor) { dpr = Math.max(floor, dpr - 0.25); applyDpr(); lastAdapt = now; }
+        else if (avg < 0.02 && dpr < maxDpr) { dpr = Math.min(maxDpr, dpr + 0.25); applyDpr(); lastAdapt = now; }
       }
       frames = 0; frameAcc = 0;
     }
