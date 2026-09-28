@@ -164,9 +164,9 @@ function makeMaterials(tex) {
   return {
     body: new THREE.MeshPhysicalMaterial({
       // black anodised magnesium: properly metallic, with fine bead-blasted grain
-      color: 0x3a3e42, roughness: 0.34, metalness: 1,
+      color: 0x3a3e42, roughness: 0.4, metalness: 1,
       normalMap: tex.grain, normalScale: new V2(0.35, 0.35), roughnessMap: tex.wear,
-      clearcoat: 0.3, clearcoatRoughness: 0.25, anisotropy: 0.25,
+      clearcoat: 0.25, clearcoatRoughness: 0.3,
     }),
     leather: new THREE.MeshStandardMaterial({
       color: 0x141719, roughness: 0.9, metalness: 0, roughnessMap: tex.wear,
@@ -182,10 +182,10 @@ function makeMaterials(tex) {
     }),
     satin: new THREE.MeshPhysicalMaterial({
       color: 0x33373b, roughness: 0.3, metalness: 1, roughnessMap: tex.wear,
-      normalMap: tex.grain, normalScale: new V2(0.2, 0.2), anisotropy: 0.5,
+      normalMap: tex.grain, normalScale: new V2(0.2, 0.2),
     }),
     metal: new THREE.MeshPhysicalMaterial({
-      color: 0xc3cacd, roughness: 0.3, metalness: 1, anisotropy: 0.7, roughnessMap: tex.wear,
+      color: 0xc3cacd, roughness: 0.3, metalness: 1, roughnessMap: tex.wear,
     }),
     metalDark: new THREE.MeshStandardMaterial({ color: 0x3a3f44, roughness: 0.28, metalness: 1 }),
     copper: new THREE.MeshStandardMaterial({ color: 0xd9865a, roughness: 0.28, metalness: 1 }),

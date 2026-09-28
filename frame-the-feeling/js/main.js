@@ -347,8 +347,23 @@ async function boot() {
       baseOverride();
       for (const o of noAO) if (o.visible) { o.visible = false; gtao._visibilityCache.push(o); }
     };
+    // Guard against fireflies: a single over-bright or invalid (NaN) pixel from
+    // a specular spike would otherwise be smeared into a white blob by bloom.
+    composer.addPass(new ShaderPass({
+      uniforms: { tDiffuse: { value: null } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform sampler2D tDiffuse; varying vec2 vUv;
+        void main() {
+          vec3 c = texture2D(tDiffuse, vUv).rgb;
+          if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0);
+          float l = max(max(c.r, c.g), c.b);
+          c *= min(1.0, 2.5 / max(l, 1e-4));
+          gl_FragColor = vec4(max(c, 0.0), 1.0);
+        }`,
+    }));
     composer.addPass(gtao);
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(2, 2), 0.2, 0.5, 1.05));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(2, 2), 0.14, 0.4, 1.4));
     filmPass = new ShaderPass({
       uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) } },
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -357,7 +372,7 @@ async function boot() {
         float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
         void main() {
           vec2 d = vUv - 0.5;
-          vec2 off = d * dot(d, d) * 0.012;
+          vec2 off = d * dot(d, d) * 0.005;
           vec3 col = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
           float g = hash(vUv * uRes + fract(uTime) * 97.0) - 0.5;
           col += g * 0.03 * (0.35 + sqrt(max(col.g, 0.0)));
@@ -445,7 +460,7 @@ async function boot() {
   // -------------------------------------------------------------------------
   // Sizing
   // -------------------------------------------------------------------------
-  let W = 0, H = 0, visW = 1, visH = 1, baseScale = 1, apartScale = 1, portrait = false, dpr = 1, maxDpr = 2;
+  let W = 0, H = 0, visW = 1, visH = 1, baseScale = 1, apartScale = 1, heroFit = null, portrait = false, dpr = 1, maxDpr = 2;
   function sizeComposer() {
     if (!composer) return;
     composer.setPixelRatio(dpr);
@@ -466,7 +481,7 @@ async function boot() {
     // lens print crisp); phones stay at up to 2x to protect battery and heat
     const native = window.devicePixelRatio || 1;
     // (the post-processing already antialiases with 4x MSAA, so it needs less)
-    maxDpr = composer ? Math.min(Math.max(native, 1.25), 2) : finePointer ? Math.min(Math.max(native * 1.25, 1.5), 2.5) : Math.min(native, 2);
+    maxDpr = composer ? Math.min(Math.max(native * 1.25, 1.5), 2) : finePointer ? Math.min(Math.max(native * 1.25, 1.5), 2.5) : Math.min(native, 2);
     if (initial) dpr = maxDpr;
     dpr = Math.min(dpr, maxDpr);
     renderer.setPixelRatio(dpr);
@@ -478,12 +493,25 @@ async function boot() {
     visW = visH * camera.aspect;
     portrait = camera.aspect < 0.85;
     // assembled size, and the (smaller) size the exploded views are framed for
-    const fitW = portrait ? 0.95 : 0.53;
-    const fitH = portrait ? 0.42 : W <= 1100 ? 0.5 : 0.63;
+    const stacked = portrait || W <= 820; // hero text sits above and below the camera
+    const fitW = stacked ? 0.9 : 0.53;
+    const fitH = stacked ? 0.36 : W <= 1100 ? 0.5 : 0.63;
     baseScale = Math.min((visW * fitW) / 1.7, (visH * fitH) / 1.05);
-    const apartW = portrait ? 0.82 : 0.42;
-    const apartH = portrait ? 0.34 : W <= 1100 ? 0.4 : 0.5;
+    const apartW = stacked ? 0.82 : 0.42;
+    const apartH = stacked ? 0.32 : W <= 1100 ? 0.4 : 0.5;
     apartScale = Math.min((visW * apartW) / 1.7, (visH * apartH) / 1.05);
+    // Stacked hero (phones, narrow windows): fit the camera into the actual gap
+    // between the headline and the copy below it, so it never sits on text.
+    heroFit = null;
+    if (stacked) {
+      const top = $('.hero-copy').getBoundingClientRect().bottom + scrollY + 10;
+      const bottom = $('.hero-side').getBoundingClientRect().top + scrollY - 10;
+      const band = Math.max(140, bottom - top);
+      heroFit = {
+        scale: Math.min((visW * 0.92) / 1.7, (visH * (band / H)) / 1.12),
+        y: ((H / 2 - (top + bottom) / 2) / H) * visH,
+      };
+    }
     ocean.uniforms.uAspect.value = camera.aspect;
     ocean.particleUniforms.uPR.value = dpr;
     ocean.setSize(W, H, W > 1600 ? 0.4 : 0.5);
@@ -789,7 +817,8 @@ async function boot() {
     model.update(cur.e, time, { aperture: irisOpen, reveal: cur.reveal });
 
     const float = Math.sin(time * 0.6) * 0.03 * drift;
-    rig.position.set(cur.p[0] * visW, cur.p[1] * visH + float, 0);
+    const heroT = heroFit ? 1 - smooth(clamp((s - 0.5) / 0.5)) : 0;
+    rig.position.set(cur.p[0] * visW, cur.p[1] * visH + float + (heroFit ? heroFit.y * heroT : 0), 0);
     if (!spin.drag && !(spin.touch && spin.touch.mode === 'spin')) {
       spin.idle += dt;
       spin.yaw += spin.vy;
@@ -808,7 +837,8 @@ async function boot() {
       cur.r[1] + turn + spin.yaw + cur.px * 0.16 * drift,
       cur.r[2] + Math.sin(time * 0.45) * 0.012 * drift,
     );
-    rig.scale.setScalar(lerp(baseScale, apartScale, smooth(clamp(cur.e))) * cur.k);
+    const fitScale = heroFit ? lerp(baseScale, heroFit.scale, heroT) : baseScale;
+    rig.scale.setScalar(lerp(fitScale, apartScale, smooth(clamp(cur.e))) * cur.k);
 
     ocean.uniforms.uDepth.value = damp(ocean.uniforms.uDepth.value, clamp(s / 6.5), 3, dt);
     ocean.uniforms.uMouse.value.set(cur.px, cur.py);
