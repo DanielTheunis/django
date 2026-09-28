@@ -127,6 +127,39 @@ function extrude(shape, depth, bevel, curveSegments = 24) {
   return g;
 }
 
+// Worn paint: where the surface curves sharply (edges, bevels, dial rims) and
+// a chip-noise mask allows, the black finish is rubbed back to bare metal.
+function addEdgeWear(material, { tint = 0x8b9196, amount = 0.6 } = {}) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uWearTint = { value: new THREE.Color(tint) };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWearPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWearPos = position;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vWearPos;
+        uniform vec3 uWearTint;
+        float wHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+        float wNoise(vec3 x) {
+          vec3 i = floor(x), f = fract(x);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(wHash(i), wHash(i + vec3(1, 0, 0)), f.x), mix(wHash(i + vec3(0, 1, 0)), wHash(i + vec3(1, 1, 0)), f.x), f.y),
+                     mix(mix(wHash(i + vec3(0, 0, 1)), wHash(i + vec3(1, 0, 1)), f.x), mix(wHash(i + vec3(0, 1, 1)), wHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+        }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        {
+          vec3 wn = normalize(vNormal);
+          float curv = length(fwidth(wn)) / max(length(fwidth(vViewPosition)), 1e-5);
+          float chip = wNoise(vWearPos * 55.0) * 0.6 + wNoise(vWearPos * 160.0) * 0.4;
+          float wear = smoothstep(8.0, 20.0, curv) * smoothstep(0.45, 0.62, chip) * ${amount.toFixed(2)};
+          diffuseColor.rgb = mix(diffuseColor.rgb, uWearTint, wear);
+          roughnessFactor = mix(roughnessFactor, 0.2, wear);
+        }`);
+  };
+  material.customProgramCacheKey = () => 'edge-wear';
+  return material;
+}
+
 function makeMaterials(tex) {
   return {
     body: new THREE.MeshPhysicalMaterial({
@@ -260,6 +293,9 @@ export function buildCamera({ wordmark, screenImage, anisotropy = 8 }) {
   };
   tex.leather.repeat.set(4, 4);
   const M = makeMaterials(tex);
+  addEdgeWear(M.body);
+  addEdgeWear(M.satin, { amount: 0.5 });
+  addEdgeWear(M.knurl, { amount: 0.45, tint: 0x9aa0a4 });
 
   const root = new THREE.Group();   // centring shift is applied here
   const parts = [];

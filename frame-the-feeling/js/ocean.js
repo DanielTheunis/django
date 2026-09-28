@@ -87,12 +87,15 @@ const COMPOSITE_FRAG = /* glsl */`
   precision highp float;
   varying vec2 vUv;
   uniform sampler2D tWater;
-  uniform float uTime, uFlash;
+  uniform float uTime, uFlash, uLinear;
   float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
   void main() {
     vec3 col = texture2D(tWater, vUv).rgb;
     col += (hash(gl_FragCoord.xy * 0.37 + fract(uTime * 0.37) * 91.0) - 0.5) * 0.018;
-    gl_FragColor = vec4(mix(col, vec3(1.0), uFlash), 1.0);
+    col = mix(col, vec3(1.0), uFlash);
+    // through post-processing the scene is linear until the final pass
+    if (uLinear > 0.5) col = pow(max(col, 0.0), vec3(2.2));
+    gl_FragColor = vec4(col, 1.0);
   }
 `;
 
@@ -190,6 +193,7 @@ export class Ocean {
       new THREE.ShaderMaterial({
         uniforms: {
           tWater: { value: this.waterTarget.texture },
+          uLinear: { value: 0 },
           uTime: this.uniforms.uTime,
           uFlash: this.uniforms.uFlash,
         },
@@ -256,6 +260,8 @@ export class Ocean {
     this.particles.frustumCulled = false;
     this.particles.renderOrder = 5;
   }
+
+  setLinearOutput(on) { this.background.material.uniforms.uLinear.value = on ? 1 : 0; }
 
   get causticTexture() { return this.causticTarget.texture; }
 

@@ -1,4 +1,10 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildCamera } from './camera-model.js';
 import { Ocean } from './ocean.js';
 
@@ -315,6 +321,53 @@ async function boot() {
   recoil.add(model.root);
   rig.add(recoil);
   scene.add(rig);
+
+  // -------------------------------------------------------------------------
+  // Photographic finish (desktop): ambient occlusion darkens every seam and
+  // crevice, bright glints bloom a little, and a lens pass adds faint colour
+  // fringing and film grain. Phones render directly to stay cool and smooth.
+  // -------------------------------------------------------------------------
+  let composer = null, filmPass = null;
+  if (finePointer) {
+    composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 4 }));
+    composer.addPass(new RenderPass(scene, camera));
+    const gtao = new GTAOPass(scene, camera, 2, 2);
+    gtao.updateGtaoMaterial({ radius: 0.35, distanceExponent: 1.5, thickness: 1.2, scale: 1.1, samples: 16 });
+    gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 });
+    gtao.blendIntensity = 1.0;
+    // keep the background, glass and printed decals out of the occlusion pass
+    const noAO = [ocean.background];
+    model.root.traverse((o) => {
+      if (!o.isMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      if (mats.some((m) => m.transparent || m.transmission > 0)) noAO.push(o);
+    });
+    const baseOverride = gtao._overrideVisibility.bind(gtao);
+    gtao._overrideVisibility = () => {
+      baseOverride();
+      for (const o of noAO) if (o.visible) { o.visible = false; gtao._visibilityCache.push(o); }
+    };
+    composer.addPass(gtao);
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(2, 2), 0.2, 0.5, 1.05));
+    filmPass = new ShaderPass({
+      uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform sampler2D tDiffuse; uniform float uTime; uniform vec2 uRes; varying vec2 vUv;
+        float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+        void main() {
+          vec2 d = vUv - 0.5;
+          vec2 off = d * dot(d, d) * 0.012;
+          vec3 col = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
+          float g = hash(vUv * uRes + fract(uTime) * 97.0) - 0.5;
+          col += g * 0.03 * (0.35 + sqrt(max(col.g, 0.0)));
+          gl_FragColor = vec4(max(col, 0.0), 1.0);
+        }`,
+    });
+    composer.addPass(filmPass);
+    composer.addPass(new OutputPass());
+    ocean.setLinearOutput(true);
+  }
   setProgress(92);
 
   // -------------------------------------------------------------------------
@@ -393,9 +446,16 @@ async function boot() {
   // Sizing
   // -------------------------------------------------------------------------
   let W = 0, H = 0, visW = 1, visH = 1, baseScale = 1, apartScale = 1, portrait = false, dpr = 1, maxDpr = 2;
+  function sizeComposer() {
+    if (!composer) return;
+    composer.setPixelRatio(dpr);
+    composer.setSize(W, H);
+    filmPass.uniforms.uRes.value.set(W * dpr, H * dpr);
+  }
   function applyDpr() {
     renderer.setPixelRatio(dpr);
     renderer.setSize(W, H, false);
+    sizeComposer();
     ocean.particleUniforms.uPR.value = dpr;
   }
   function resize(initial = false) {
@@ -405,11 +465,13 @@ async function boot() {
     // render above screen density on desktops (supersampling keeps edges and
     // lens print crisp); phones stay at up to 2x to protect battery and heat
     const native = window.devicePixelRatio || 1;
-    maxDpr = finePointer ? Math.min(Math.max(native * 1.25, 1.5), 2.5) : Math.min(native, 2);
+    // (the post-processing already antialiases with 4x MSAA, so it needs less)
+    maxDpr = composer ? Math.min(Math.max(native, 1.25), 2) : finePointer ? Math.min(Math.max(native * 1.25, 1.5), 2.5) : Math.min(native, 2);
     if (initial) dpr = maxDpr;
     dpr = Math.min(dpr, maxDpr);
     renderer.setPixelRatio(dpr);
     renderer.setSize(W, H, false);
+    sizeComposer();
     camera.aspect = W / H;
     camera.updateProjectionMatrix();
     visH = 2 * CAM_Z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
@@ -754,7 +816,12 @@ async function boot() {
     ocean.particleUniforms.uOpacity.value = reduceMotion ? 0.5 : 1;
     ocean.update(renderer, reduceMotion ? 0 : time);
 
-    renderer.render(scene, camera);
+    if (composer) {
+      filmPass.uniforms.uTime.value = time;
+      composer.render(dt);
+    } else {
+      renderer.render(scene, camera);
+    }
     updateLeaders(s);
     updateHud(s, scrollP);
 
