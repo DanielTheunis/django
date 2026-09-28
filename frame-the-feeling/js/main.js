@@ -458,7 +458,60 @@ async function boot() {
     const over = !e.target.closest(interactive) && hitCamera(e.clientX, e.clientY);
     html.classList.toggle('over-camera', over);
   }, { passive: true });
+  // Drag the camera to spin it: full turns left/right, tilt up/down.
+  // It keeps a little momentum, then settles back into the scroll pose.
+  const spin = { yaw: 0, pitch: 0, vy: 0, vp: 0, drag: false, moved: 0, idle: 9, x: 0, y: 0, touch: null };
+  const spinBy = (dx, dy) => {
+    const k = 0.009;
+    spin.yaw += dx * k;
+    spin.pitch = clamp(spin.pitch + dy * k * 0.7, -1.2, 1.2);
+    spin.vy = dx * k;
+    spin.vp = dy * k * 0.7;
+    spin.moved += Math.abs(dx) + Math.abs(dy);
+    spin.idle = 0;
+  };
+  addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch' || e.button !== 0 || !intro.done) return;
+    if (e.target.closest(interactive) || !hitCamera(e.clientX, e.clientY)) return;
+    spin.drag = true;
+    spin.moved = 0;
+    spin.x = e.clientX;
+    spin.y = e.clientY;
+    html.classList.add('spinning');
+    e.preventDefault();
+  });
+  addEventListener('pointermove', (e) => {
+    if (!spin.drag) return;
+    spinBy(e.clientX - spin.x, e.clientY - spin.y);
+    spin.x = e.clientX;
+    spin.y = e.clientY;
+  });
+  const endDrag = () => { spin.drag = false; html.classList.remove('spinning'); };
+  addEventListener('pointerup', endDrag);
+  addEventListener('pointercancel', endDrag);
+  // touch: a sideways swipe that starts on the camera spins it; vertical swipes still scroll
+  addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    if (e.touches.length !== 1 || !intro.done || e.target.closest(interactive) || !hitCamera(t.clientX, t.clientY)) { spin.touch = null; return; }
+    spin.touch = { x: t.clientX, y: t.clientY, mode: null };
+    spin.moved = 0;
+  }, { passive: true });
+  addEventListener('touchmove', (e) => {
+    const st = spin.touch;
+    if (!st) return;
+    const t = e.touches[0];
+    const dx = t.clientX - st.x, dy = t.clientY - st.y;
+    if (!st.mode && Math.hypot(dx, dy) > 8) st.mode = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'spin' : 'scroll';
+    if (st.mode !== 'spin') return;
+    e.preventDefault();
+    spinBy(dx * 1.3, 0);
+    st.x = t.clientX;
+    st.y = t.clientY;
+  }, { passive: false });
+  addEventListener('touchend', () => { spin.touch = null; });
+
   addEventListener('click', (e) => {
+    if (spin.moved > 6) { spin.moved = 0; return; }
     if (e.target.closest(interactive) || !intro.done) return;
     if (hitCamera(e.clientX, e.clientY)) {
       if (model.explode < 0.2) snap('click');
@@ -675,9 +728,22 @@ async function boot() {
 
     const float = Math.sin(time * 0.6) * 0.03 * drift;
     rig.position.set(cur.p[0] * visW, cur.p[1] * visH + float, 0);
+    if (!spin.drag && !(spin.touch && spin.touch.mode === 'spin')) {
+      spin.idle += dt;
+      spin.yaw += spin.vy;
+      spin.pitch = clamp(spin.pitch + spin.vp, -1.2, 1.2);
+      const fric = Math.exp(-4 * dt);
+      spin.vy *= fric;
+      spin.vp *= fric;
+      if (spin.idle > 2.5) {
+        // settle on the nearest whole turn so it never unwinds backwards
+        spin.yaw = damp(spin.yaw, Math.round(spin.yaw / TAU) * TAU, 2, dt);
+        spin.pitch = damp(spin.pitch, 0, 2, dt);
+      }
+    }
     rig.rotation.set(
-      cur.r[0] + tilt + cur.py * 0.08 * drift,
-      cur.r[1] + turn + cur.px * 0.16 * drift,
+      cur.r[0] + tilt + spin.pitch + cur.py * 0.08 * drift,
+      cur.r[1] + turn + spin.yaw + cur.px * 0.16 * drift,
       cur.r[2] + Math.sin(time * 0.45) * 0.012 * drift,
     );
     rig.scale.setScalar(lerp(baseScale, apartScale, smooth(clamp(cur.e))) * cur.k);

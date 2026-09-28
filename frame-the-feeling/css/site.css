@@ -1040,3 +1040,7 @@ section { padding-inline: var(--gutter); }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* drag-to-spin cursor on the camera */
+.over-camera body { cursor: grab; }
+.spinning, .spinning body { cursor: grabbing; user-select: none; }

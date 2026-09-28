@@ -130,9 +130,10 @@ function extrude(shape, depth, bevel, curveSegments = 24) {
 function makeMaterials(tex) {
   return {
     body: new THREE.MeshPhysicalMaterial({
-      color: 0x232427, roughness: 0.66, metalness: 0.3,
-      normalMap: tex.grain, normalScale: new V2(0.45, 0.45), roughnessMap: tex.wear,
-      specularIntensity: 0.55, sheen: 0.15, sheenRoughness: 0.8, sheenColor: new THREE.Color(0x303335),
+      // black anodised magnesium: properly metallic, with fine bead-blasted grain
+      color: 0x3a3e42, roughness: 0.34, metalness: 1,
+      normalMap: tex.grain, normalScale: new V2(0.35, 0.35), roughnessMap: tex.wear,
+      clearcoat: 0.3, clearcoatRoughness: 0.25, anisotropy: 0.25,
     }),
     leather: new THREE.MeshStandardMaterial({
       color: 0x141719, roughness: 0.9, metalness: 0, roughnessMap: tex.wear,
@@ -147,17 +148,17 @@ function makeMaterials(tex) {
       normalMap: tex.ribsFine, normalScale: new V2(0.9, 0.9),
     }),
     satin: new THREE.MeshPhysicalMaterial({
-      color: 0x1e2225, roughness: 0.5, metalness: 0.55, roughnessMap: tex.wear,
-      normalMap: tex.grain, normalScale: new V2(0.22, 0.22),
+      color: 0x33373b, roughness: 0.3, metalness: 1, roughnessMap: tex.wear,
+      normalMap: tex.grain, normalScale: new V2(0.2, 0.2), anisotropy: 0.5,
     }),
     metal: new THREE.MeshPhysicalMaterial({
       color: 0xc3cacd, roughness: 0.3, metalness: 1, anisotropy: 0.7, roughnessMap: tex.wear,
     }),
-    metalDark: new THREE.MeshStandardMaterial({ color: 0x2c3236, roughness: 0.32, metalness: 0.9 }),
+    metalDark: new THREE.MeshStandardMaterial({ color: 0x3a3f44, roughness: 0.28, metalness: 1 }),
     copper: new THREE.MeshStandardMaterial({ color: 0xd9865a, roughness: 0.28, metalness: 1 }),
     interior: new THREE.MeshStandardMaterial({ color: 0x050607, roughness: 0.92, metalness: 0 }),
     knurl: new THREE.MeshStandardMaterial({
-      color: 0x1f2427, roughness: 0.34, metalness: 0.85,
+      color: 0x3a3f43, roughness: 0.26, metalness: 1,
       normalMap: tex.knurl, normalScale: new V2(1.4, 1.4),
     }),
     // Real refracting glass: light bends through it and shows the barrel and
